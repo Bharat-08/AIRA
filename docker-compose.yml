@@ -1,0 +1,36 @@
+# recruiter-platform/docker-compose.yml
+
+services:
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      # Sync your local frontend code with the container
+      - ./frontend:/app
+      # --- THIS IS THE FIX ---
+      # Use a named volume to isolate node_modules inside the container,
+      # preventing conflicts with your local machine.
+      - node_modules:/app/node_modules
+    command: npm run dev -- --host
+    depends_on:
+      - backend
+
+# --- ADD THIS SECTION AT THE END ---
+# This defines the named volume we used above.
+volumes:
+  node_modules:
