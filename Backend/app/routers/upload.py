@@ -1,29 +1,27 @@
-# backend/app/routers/upload.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from typing import List
 import tempfile
 from pathlib import Path
-from openai import OpenAI, APITimeoutError, AuthenticationError, BadRequestError
+# --- START: MODIFICATION ---
+# All OpenAI related imports are now removed
+# from openai import OpenAI, APITimeoutError, AuthenticationError, BadRequestError
+# --- END: MODIFICATION ---
 
 from app.dependencies import get_current_user, get_supabase_client
 from app.services.jd_parsing_service import process_jd_file
 from app.services.resume_parsing_service import process_resume_file
 from app.models.user import User
-from app.config import settings # Import the settings object
+from app.config import settings
 
 router = APIRouter(
     prefix="/upload",
     tags=["Upload & Parse"],
 )
 
-# --- Production-Ready OpenAI Client Initialization ---
-if not settings.OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY is not set in the environment. The application cannot start.")
+# --- START: MODIFICATION ---
+# The OpenAI client initialization is no longer needed and has been removed.
+# --- END: MODIFICATION ---
 
-openai_client = OpenAI(
-    api_key=settings.OPENAI_API_KEY,
-    timeout=120.0,
-)
 
 @router.post("/jd")
 async def upload_jd(
@@ -34,7 +32,6 @@ async def upload_jd(
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided.")
 
-    # Create a temporary file to store the upload
     with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
@@ -42,29 +39,16 @@ async def upload_jd(
     try:
         result = process_jd_file(
             supabase=supabase,
-            openai_client=openai_client,
             file_path=tmp_path,
             user_id=str(current_user.id)
         )
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    # --- Improved Error Handling for OpenAI ---
-    except APITimeoutError:
-        print("OpenAI request timed out after 2 minutes.")
-        raise HTTPException(status_code=504, detail="The request to the AI service timed out. Please try again later.")
-    except AuthenticationError:
-        print("OpenAI Authentication Error: The API key is invalid or has expired.")
-        raise HTTPException(status_code=500, detail="Authentication with the AI service failed.")
-    except BadRequestError as e:
-        print(f"OpenAI Bad Request Error: {e}")
-        raise HTTPException(status_code=400, detail=f"Invalid request to OpenAI: {e.body.get('message')}")
-    # --- End of Improvement ---
     except Exception as e:
         print(f"An unexpected error occurred during JD processing: {e}")
-        raise HTTPException(status_code=500, detail="An internal error occurred.")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
     finally:
-        # Ensure the temporary file is always deleted
         if tmp_path.exists():
             tmp_path.unlink()
 
@@ -91,13 +75,15 @@ async def upload_resumes(
             tmp_path = Path(tmp.name)
 
         try:
+            # --- START: MODIFICATION ---
+            # The openai_client argument has been removed from this call.
             result = process_resume_file(
                 supabase=supabase,
-                openai_client=openai_client,
                 file_path=tmp_path,
                 user_id=str(current_user.id),
                 jd_id=jd_id
             )
+            # --- END: MODIFICATION ---
             results.append(result)
         except Exception as e:
             errors.append({"filename": file.filename, "error": str(e)})

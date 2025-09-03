@@ -6,12 +6,12 @@ from pathlib import Path
 from datetime import datetime
 import tempfile
 
-from openai import OpenAI
+import google.generativeai as genai
 from supabase import Client
 import docx2txt
 from pypdf import PdfReader
+from app.config import settings
 
-# --- Text Extraction Logic ---
 def extract_text(path: Path) -> str:
     ext = path.suffix.lower()
     if ext == ".txt":
@@ -27,8 +27,20 @@ def extract_text(path: Path) -> str:
         return "\n".join(text_parts).strip()
     raise ValueError(f"Unsupported file type: {ext}")
 
-# --- JD Parser Logic (Updated based on jd_parser.py) ---
-JD_SYSTEM_PROMPT = """You are an expert job description parser. Extract the following fields from the provided job description text:
+
+def parse_jd_text(text: str) -> dict:
+    """
+    Calls the Google Gemini API to parse text and normalizes the response.
+    """
+    try:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        
+        # --- START: CORRECTION ---
+        # The model name has been updated to the latest stable version.
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        # --- END: CORRECTION ---
+
+        prompt = f"""You are an expert job description parser. Extract the following fields from the provided job description text:
 
 - location: City/State/Country if present; else null/empty
 - job_type: One of ['Full Time', 'Part Time', 'Internship', 'Contract'] if you can infer, else null/empty
@@ -37,46 +49,47 @@ JD_SYSTEM_PROMPT = """You are an expert job description parser. Extract the foll
 
 If a field is not present, return it as an empty string.
 Return strictly as compact JSON with keys: location, job_type, experience_required, jd_parsed_summary.
-"""
-JD_USER_TEMPLATE = "Job Description Text:\n---\n{content}\n---"
 
-def parse_jd_text(client: OpenAI, text: str) -> dict:
-    """
-    Calls the OpenAI API to parse text and normalizes the response.
-    """
-    resp = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o"),
-        messages=[
-            {"role": "system", "content": JD_SYSTEM_PROMPT},
-            {"role": "user", "content": JD_USER_TEMPLATE.format(content=text[:120000])},
-        ],
-        response_format={"type": "json_object"},
-    )
-    data = json.loads(resp.choices[0].message.content)
+Job Description Text:
+---
+{text[:120000]}
+---"""
 
-    # Normalize the data to ensure consistency, similar to jd_parser.py
-    normalized_data = {
-        "location": (data.get("location") or "").strip(),
-        "job_type": (data.get("job_type") or "").strip(),
-        "experience_required": (data.get("experience_required") or "").strip(),
-        "jd_parsed_summary": (data.get("jd_parsed_summary") or "").strip(),
-    }
+        response = model.generate_content(prompt)
+        
+        content = response.text.strip()
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.endswith("```"):
+            content = content[:-3]
 
-    # Constrain job_type to a specific set of allowed values
-    allowed_job_types = {"Full Time", "Part Time", "Internship", "Contract"}
-    if normalized_data["job_type"] not in allowed_job_types:
-        normalized_data["job_type"] = "" # Set to empty if not a valid type
+        data = json.loads(content)
 
-    return normalized_data
+        normalized_data = {
+            "location": (data.get("location") or "").strip(),
+            "job_type": (data.get("job_type") or "").strip(),
+            "experience_required": (data.get("experience_required") or "").strip(),
+            "jd_parsed_summary": (data.get("jd_parsed_summary") or "").strip(),
+        }
 
-def process_jd_file(supabase: Client, openai_client: OpenAI, file_path: Path, user_id: str) -> dict:
+        allowed_job_types = {"Full Time", "Part Time", "Internship", "Contract"}
+        if normalized_data["job_type"] not in allowed_job_types:
+            normalized_data["job_type"] = ""
+
+        return normalized_data
+
+    except Exception as e:
+        print(f"Error during Gemini API call: {e}")
+        raise
+
+
+def process_jd_file(supabase: Client, file_path: Path, user_id: str) -> dict:
     text = extract_text(file_path)
     if not text.strip():
         raise ValueError("No text could be extracted from the JD file.")
 
-    parsed_data = parse_jd_text(openai_client, text)
+    parsed_data = parse_jd_text(text)
 
-    # Upload the original file to Supabase storage
     bucket = "jds"
     ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     object_name = f"{user_id}/{ts}_{file_path.name}"
@@ -89,7 +102,6 @@ def process_jd_file(supabase: Client, openai_client: OpenAI, file_path: Path, us
             file_options={"contentType": content_type or "application/octet-stream"}
         )
 
-    # Prepare data for insertion, mapping empty strings to None for the database
     row = {
         "user_id": user_id,
         "file_url": object_name,

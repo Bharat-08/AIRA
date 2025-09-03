@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     JWT_PRIVATE_KEY: str
     JWT_PUBLIC_KEY: str
     JWT_ALGORITHM: str = "RS256"
-    JWT_EXPIRATION_MINUTES: int = 60 # <<< THIS LINE WAS RENAMED/FIXED
+    JWT_EXPIRATION_MINUTES: int = 60 
     COOKIE_NAME: str = "access_token"
 
     # --- Database ---
@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # --- External Services ---
     OPENAI_API_KEY: str
+    GEMINI_API_KEY: str  # <<< ADD THIS LINE
 
     # --- Business Logic Rules ---
     INVITE_ONLY: bool = True
