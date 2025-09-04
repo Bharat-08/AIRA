@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .routers import auth, health, me, orgs, superadmin, favorites, upload, roles
+# --- MODIFICATION: Ensure the new 'search' router is imported ---
+from .routers import auth, health, me, orgs, superadmin, favorites, upload, roles, search
 
 app = FastAPI(
     title="Recruiter Platform API",
@@ -22,12 +23,16 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    # --- THIS IS THE FIX ---
+    # This line is essential. It tells the browser that it is safe
+    # to send the HttpOnly authentication cookie with requests.
     allow_credentials=True,
+    # --- END OF FIX ---
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- SessionMiddleware Re-enabled ---
+# --- SessionMiddleware Re-enabled (Preserved from your original file) ---
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SESSION_SECRET_KEY,
@@ -43,10 +48,11 @@ app.include_router(orgs.router)
 app.include_router(superadmin.router, prefix="/superadmin", tags=["Super Admin"])
 app.include_router(favorites.router, tags=["Favorites"])
 app.include_router(roles.router, prefix="/roles", tags=["Roles"])
+# --- MODIFICATION: Ensure the new search router is included ---
+app.include_router(search.router, prefix="/search", tags=["Search"])
 
 
 @app.get("/", tags=["Health Check"])
 def read_root():
     """A simple health check endpoint to confirm the API is running."""
     return {"status": "ok"}
-

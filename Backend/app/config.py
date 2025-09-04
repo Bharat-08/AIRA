@@ -1,5 +1,3 @@
-# backend/app/config.py
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -30,10 +28,16 @@ class Settings(BaseSettings):
 
     # --- Database ---
     DATABASE_URL: str
+    # --- START: CORRECTION ---
+    # Add the Supabase URL and Key. The agent needs these to create its own client
+    # within the background task. Make sure these are also in your .env file.
+    SUPABASE_URL: str
+    SUPABASE_KEY: str
+    # --- END: CORRECTION ---
 
     # --- External Services ---
     OPENAI_API_KEY: str
-    GEMINI_API_KEY: str  # <<< ADD THIS LINE
+    GEMINI_API_KEY: str
 
     # --- Business Logic Rules ---
     INVITE_ONLY: bool = True

@@ -136,3 +136,7 @@ google-auth-httplib2
 google-auth-oauthlib
 google-generativeai
 peopledatalabs
+beautifulsoup4
+rapidfuzz
+langgraph
+google-genai
