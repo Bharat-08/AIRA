@@ -18,7 +18,11 @@ const mockRoles: Role[] = [
     updatedAt: '2024-06-10T00:00:00Z',
     description: [
       'We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.',
-      'You will work closely with other engineers, product managers, and designers to deliver innovative and impactful products.'
+      'You will work closely with other engineers, product managers, and designers to deliver innovative and impactful products.',
+      'This is a fantastic opportunity to work on cutting-edge technology in a collaborative and fast-paced environment. We encourage creative problem-solving and provide ample opportunities for professional growth.',
+      'The ideal candidate will have a strong background in backend systems, a passion for clean code, and a proven track record of shipping complex software. Familiarity with cloud services and CI/CD pipelines is a significant plus.',
+      'Your responsibilities will also include mentoring junior engineers, participating in code reviews, and contributing to architectural decisions that will shape the future of our platform.',
+      'We believe in a healthy work-life balance and offer a competitive salary, comprehensive benefits, and a flexible work schedule. Join us to build something amazing.'
     ],
     experience: '5+ years',
     keyRequirements: ['Java', 'Python', 'Cloud'],
@@ -99,4 +103,3 @@ export const getRoles = (): Promise<Role[]> => {
     }, 300);
   });
 };
-

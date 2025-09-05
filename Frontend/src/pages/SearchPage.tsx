@@ -1,37 +1,39 @@
-// src/pages/SearchPage.tsx
 import React, { useState, useRef } from 'react';
 import { Header } from '../components/layout/Header';
 import { CandidateRow } from '../components/ui/CandidateRow';
 import { Plus, UploadCloud, Search as SearchIcon, SendHorizonal, Bot, Eye, History, RefreshCw } from 'lucide-react';
 import type { User } from '../types/user';
-import { uploadJdFile, uploadResumeFiles } from '../api/upload';
+import { uploadJdFile } from '../api/upload';
+// --- MODIFICATION START ---
+// 1. Import the new search API function and the correct Candidate type
+import { searchCandidates } from '../api/search';
+import type { Candidate } from '../types/candidate'; // This now refers to the new interface for ranked candidates
+// --- MODIFICATION END ---
 
-const mockCandidates = [
-  { name: 'Bharat', title: 'Sr. PM', avatar: 'AK', score: 92 },
-  { name: 'Ben', title: 'Company', avatar: 'BC', score: 88 },
-  { name: 'Chloe', title: 'Current Role with company', avatar: 'CD', score: 85 },
-];
 
-// --- THIS IS THE FIX (Part 1) ---
-// The interface now expects 'jd_id' to match the database schema.
+// This interface correctly matches the data from the JD upload API
 interface JobDescription {
-  jd_id: string; // Changed from 'id' to 'jd_id'
+  jd_id: string;
   jd_parsed_summary: string;
   location: string;
   job_type: string;
   experience_required: string;
 }
-// --- END OF FIX ---
 
 export function SearchPage({ user }: { user: User }) {
   const userName = user.name || 'User';
 
   const [currentJd, setCurrentJd] = useState<JobDescription | null>(null);
-  const [resumeFiles, setResumeFiles] = useState<FileList | null>(null);
+  const [resumeFiles, setResumeFiles] = useState<FileList | null>(null); // This state is preserved for the UI
   const [isJdLoading, setIsJdLoading] = useState(false);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [chatMessage, setChatMessage] = useState('');
+
+  // --- MODIFICATION START ---
+  // 2. This state now holds the ranked candidates returned from the full workflow
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  // --- MODIFICATION END ---
 
   const jdInputRef = useRef<HTMLInputElement>(null);
   const resumeInputRef = useRef<HTMLInputElement>(null);
@@ -41,6 +43,7 @@ export function SearchPage({ user }: { user: User }) {
       const file = event.target.files[0];
       setIsJdLoading(true);
       setUploadStatus(null);
+      setCandidates([]); // Clear old candidate results when a new JD is uploaded
       try {
         const result = await uploadJdFile(file);
         setCurrentJd(result);
@@ -59,32 +62,39 @@ export function SearchPage({ user }: { user: User }) {
     }
   };
 
+  // --- MODIFICATION START ---
+  // 3. This function now triggers the full search-then-rank workflow on the backend.
   const handleSearchAndRank = async () => {
-    if (!resumeFiles || resumeFiles.length === 0) {
-      setUploadStatus({ message: 'Please select resume files to upload.', type: 'error' });
-      return;
-    }
     if (!currentJd) {
       setUploadStatus({ message: 'Please upload a Job Description first.', type: 'error' });
       return;
     }
+    if (!chatMessage) {
+        setUploadStatus({ message: 'Please enter a prompt in the chat box to start the search.', type: 'error' });
+        return;
+    }
 
     setIsRankingLoading(true);
     setUploadStatus(null);
+    setCandidates([]); // Clear previous results before starting a new search
+
     try {
-      // --- THIS IS THE FIX (Part 2) ---
-      // Pass the correct property 'jd_id' to the API function.
-      const result = await uploadResumeFiles(resumeFiles, currentJd.jd_id);
-      // --- END OF FIX ---
-      console.log(result);
-      setUploadStatus({ message: `${result.successful_uploads.length} resumes uploaded successfully!`, type: 'success' });
-      setResumeFiles(null);
+      // Call the search API which now handles both searching and ranking
+      const result = await searchCandidates(currentJd.jd_id, chatMessage);
+      setCandidates(result);
+
+      if (result.length > 0) {
+        setUploadStatus({ message: `Found and ranked ${result.length} new candidates!`, type: 'success' });
+      } else {
+        setUploadStatus({ message: 'Search complete. No new candidates were found for this prompt.', type: 'success' });
+      }
     } catch (error) {
       setUploadStatus({ message: (error as Error).message, type: 'error' });
     } finally {
       setIsRankingLoading(false);
     }
   };
+  // --- MODIFICATION END ---
 
   const getButtonText = () => {
     if (isJdLoading) return 'Parsing JD...';
@@ -98,6 +108,7 @@ export function SearchPage({ user }: { user: User }) {
       <main className="flex-grow p-4 sm:p-6 md:p-8 max-w-screen-2xl mx-auto w-full overflow-y-auto">
         <div className="grid grid-cols-12 gap-8 h-full">
           <aside className="col-span-3 flex flex-col gap-6">
+            {/* This entire aside section is preserved to maintain the UI */}
             <div className="p-4 bg-white rounded-lg border border-gray-200">
               <div className="flex justify-between items-center mb-2">
                 <label className="font-semibold text-gray-700">Select Role</label>
@@ -139,8 +150,8 @@ export function SearchPage({ user }: { user: User }) {
               <h3 className="font-semibold text-gray-700 mb-3">Sourcing Options</h3>
               <div className="space-y-2 text-sm">
                 <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="db" /> My Database</label>
-                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="web" /> Web Search</label>
-                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="both" defaultChecked /> Both</label>
+                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="web" defaultChecked /> Web Search</label>
+                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="web" defaultChecked /> oth</label>
               </div>
               <button onClick={() => resumeInputRef.current?.click()} className="mt-4 w-full border-dashed border-2 border-gray-300 rounded-lg p-6 text-center hover:border-teal-500 hover:text-teal-500 transition-colors">
                 <UploadCloud size={24} className="mx-auto text-gray-400"/>
@@ -166,9 +177,13 @@ export function SearchPage({ user }: { user: User }) {
             <div className="p-6 bg-white rounded-lg border border-gray-200">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold">Top Matching Candidates</h2>
-                <a href="#" className="text-sm text-teal-600 hover:underline">Searching & Ranking...</a>
+                {isRankingLoading && <span className="text-sm text-teal-600">Searching & Ranking...</span>}
               </div>
-              <p className="text-sm text-gray-500 mb-4">Found 5 strong matches for Product Manager (SG).</p>
+              <p className="text-sm text-gray-500 mb-4">
+                {isRankingLoading ? "The AI agent is searching and ranking candidates. This may take a moment..." : 
+                 candidates.length > 0 ? `Found and ranked ${candidates.length} candidates matching your prompt.` :
+                 "Enter a prompt below and click 'Search and Rank' to find candidates."}
+              </p>
               <div className="grid grid-cols-12 text-xs font-semibold text-gray-500 uppercase py-2 border-b-2">
                 <div className="col-span-4">Candidate</div>
                 <div className="col-span-2">Match Score</div>
@@ -176,15 +191,18 @@ export function SearchPage({ user }: { user: User }) {
                 <div className="col-span-4">Actions</div>
               </div>
               <div>
-                {mockCandidates.map(candidate => (
+                {/* --- MODIFICATION START --- */}
+                {/* 4. Render real, ranked candidates and pass the match score */}
+                {candidates.map((candidate, index) => (
                   <CandidateRow 
-                    key={candidate.name}
-                    name={candidate.name}
-                    title={candidate.title}
-                    avatarInitial={candidate.avatar}
-                    matchScore={candidate.score}
+                    key={index}
+                    name={candidate.full_name || 'N/A'}
+                    title={`${candidate.current_title || 'N/A'} at ${candidate.current_company || 'N/A'}`}
+                    avatarInitial={candidate.full_name ? candidate.full_name.split(' ').map(n => n[0]).join('') : 'C'}
+                    matchScore={Math.round(candidate.match_score)} // Pass the match score from the ranker
                   />
                 ))}
+                {/* --- MODIFICATION END --- */}
               </div>
             </div>
 
@@ -214,10 +232,11 @@ export function SearchPage({ user }: { user: User }) {
                         type="text"
                         value={chatMessage}
                         onChange={(e) => setChatMessage(e.target.value)}
-                        placeholder="Chat with AIRA..."
+                        placeholder="Enter your prompt here, e.g., Find senior developers..."
                         className="w-full pl-4 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearchAndRank()}
                     />
-                    <button className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-teal-600">
+                    <button onClick={handleSearchAndRank} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-teal-600">
                         <SendHorizonal size={20} />
                     </button>
                 </div>
@@ -235,3 +254,4 @@ export function SearchPage({ user }: { user: User }) {
     </div>
   );
 }
+

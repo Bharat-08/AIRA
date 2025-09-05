@@ -2,18 +2,18 @@
 import { Link, Star, Send, Phone, Trash2 } from 'lucide-react';
 import React from 'react';
 // MODIFIED: Imported new types
-import type { Candidate, CandidateStage } from '../../types/candidate';
+import type { PipelineCandidate, CandidateStage } from '../../types/candidate';
 import { candidateStages } from '../../types/candidate';
 
 
 interface PipelineCandidateRowProps {
-  candidate: Candidate;
+  candidate: PipelineCandidate;
   // ADDED: Prop to handle stage changes
   onStageChange: (id: string, newStage: CandidateStage) => void;
 }
 
 // A helper to determine badge color based on status
-const getStatusBadgeClass = (status: Candidate['status']) => {
+const getStatusBadgeClass = (status: PipelineCandidate['status']) => {
   switch (status) {
     case 'Favourited':
       return 'bg-yellow-100 text-yellow-800';

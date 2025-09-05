@@ -1,7 +1,7 @@
 // src/api/pipeline.ts
-import type { Candidate } from '../types/candidate';
+import type { PipelineCandidate } from '../types/candidate';
 
-const mockCandidates: Candidate[] = [
+const mockCandidates: PipelineCandidate[] = [
   {
     id: '1',
     name: 'Sophia Rodriguez',
@@ -102,7 +102,7 @@ const mockCandidates: Candidate[] = [
   // --- END: ADDED MOCK CANDIDATES ---
 ];
 
-export const getPipelineCandidates = (): Promise<Candidate[]> => {
+export const getPipelineCandidates = (): Promise<PipelineCandidate[]> => {
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve(mockCandidates);

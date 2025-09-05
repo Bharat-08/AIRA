@@ -23,7 +23,10 @@ const RoleDetails: React.FC<RoleDetailsProps> = ({ role }) => {
         </p>
       </div>
       
-      <div className="flex-grow space-y-4 text-slate-600 leading-relaxed text-base">
+      {/* --- MODIFICATION START --- */}
+      {/* Added max-h-[40vh] to limit height and overflow-y-auto to enable scrolling */}
+      <div className="flex-grow space-y-4 text-slate-600 leading-relaxed text-base max-h-[40vh] overflow-y-auto pr-4">
+      {/* --- MODIFICATION END --- */}
         {role.description.map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
         ))}

@@ -12,6 +12,9 @@ services:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
       - ./backend/alembic.ini:/app/alembic.ini
+      - ./test_searcher.py:/app/test_searcher.py
+      - ./ranker.py:/app/ranker.py
+      
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
