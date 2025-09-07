@@ -151,7 +151,7 @@ export function SearchPage({ user }: { user: User }) {
               <div className="space-y-2 text-sm">
                 <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="db" /> My Database</label>
                 <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="web" defaultChecked /> Web Search</label>
-                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="web" defaultChecked /> oth</label>
+                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="web" defaultChecked /> Both</label>
               </div>
               <button onClick={() => resumeInputRef.current?.click()} className="mt-4 w-full border-dashed border-2 border-gray-300 rounded-lg p-6 text-center hover:border-teal-500 hover:text-teal-500 transition-colors">
                 <UploadCloud size={24} className="mx-auto text-gray-400"/>
