@@ -1,14 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Header } from '../components/layout/Header';
 import { CandidateRow } from '../components/ui/CandidateRow';
 import { Plus, UploadCloud, Search as SearchIcon, SendHorizonal, Bot, Eye, History } from 'lucide-react';
 import type { User } from '../types/user';
-import { uploadJdFile } from '../api/upload';
+import { uploadJdFile, uploadResumeFiles } from '../api/upload';
+// --- 1. Import the new API function and interface ---
+import { fetchJdsForUser, type JdSummary } from '../api/roles';
 import { searchCandidates } from '../api/search';
 import type { Candidate } from '../types/candidate';
 
-// Defines the data structure for a parsed Job Description from the API
-interface JobDescription {
+// This interface is used for the currently selected JD's full details
+interface JobDescriptionDetails {
   jd_id: string;
   jd_parsed_summary: string;
   location: string;
@@ -19,8 +21,12 @@ interface JobDescription {
 export function SearchPage({ user }: { user: User }) {
   const userName = user.name || 'User';
 
-  // --- State Management ---
-  const [currentJd, setCurrentJd] = useState<JobDescription | null>(null);
+  // --- 2. Add state to hold the list of all of the user's JDs ---
+  const [userJds, setUserJds] = useState<JdSummary[]>([]);
+  
+  // This state will hold the full details of the JD selected from the dropdown
+  const [currentJd, setCurrentJd] = useState<JobDescriptionDetails | null>(null);
+  
   const [resumeFiles, setResumeFiles] = useState<FileList | null>(null);
   const [isJdLoading, setIsJdLoading] = useState(false);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
@@ -28,20 +34,40 @@ export function SearchPage({ user }: { user: User }) {
   const [chatMessage, setChatMessage] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
 
-  // Refs for hidden file inputs
   const jdInputRef = useRef<HTMLInputElement>(null);
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
+  // --- 3. Fetch all JDs when the component first loads ---
+  useEffect(() => {
+    const loadUserJds = async () => {
+      try {
+        const jds = await fetchJdsForUser();
+        setUserJds(jds);
+        // If the user has JDs, automatically select the first one
+        if (jds.length > 0) {
+          handleJdSelection(jds[0].jd_id);
+        }
+      } catch (error) {
+        setUploadStatus({ message: 'Could not load your saved roles.', type: 'error' });
+      }
+    };
+    loadUserJds();
+  }, []); // Empty dependency array means this runs once when the component mounts
+
+  // --- 4. Handle a new JD file being uploaded ---
   const handleJdFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setIsJdLoading(true);
       setUploadStatus(null);
-      setCandidates([]); // Clear old results when a new JD is uploaded
       try {
-        const result = await uploadJdFile(file);
-        setCurrentJd(result);
-        setUploadStatus({ message: 'JD uploaded and parsed successfully!', type: 'success' });
+        const newJd = await uploadJdFile(file);
+        // After a successful upload, refresh the list of JDs
+        const updatedJds = await fetchJdsForUser();
+        setUserJds(updatedJds);
+        // Automatically select the newly uploaded JD in the dropdown
+        handleJdSelection(newJd.jd_id);
+        setUploadStatus({ message: 'JD uploaded and selected!', type: 'success' });
       } catch (error) {
         setUploadStatus({ message: (error as Error).message, type: 'error' });
       } finally {
@@ -49,7 +75,27 @@ export function SearchPage({ user }: { user: User }) {
       }
     }
   };
+  
+  // --- 5. Handle the user selecting a JD from the dropdown ---
+  const handleJdSelection = (selectedJdId: string) => {
+    // Find the full details of the selected JD from the list we fetched
+    const selectedJd = userJds.find(jd => jd.jd_id === selectedJdId);
+    if (selectedJd) {
+      // Set the `currentJd` state to display its details
+      setCurrentJd({
+        jd_id: selectedJd.jd_id,
+        jd_parsed_summary: selectedJd.jd_parsed_summary || '',
+        location: selectedJd.location || 'N/A',
+        job_type: selectedJd.job_type || 'N/A',
+        experience_required: selectedJd.experience_required || 'N/A',
+      });
+      // Clear out results from any previous search
+      setCandidates([]);
+      setUploadStatus(null);
+    }
+  };
 
+  // --- (Other functions like handleResumeFilesChange and handleSearchAndRank are preserved) ---
   const handleResumeFilesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       setResumeFiles(event.target.files);
@@ -69,12 +115,18 @@ export function SearchPage({ user }: { user: User }) {
     setIsRankingLoading(true);
     setUploadStatus(null);
     try {
-      // This single API call now triggers the entire search-and-rank workflow
+      if (resumeFiles && resumeFiles.length > 0) {
+        await uploadResumeFiles(resumeFiles, currentJd.jd_id);
+        setResumeFiles(null); 
+        if (resumeInputRef.current) resumeInputRef.current.value = "";
+        setUploadStatus({ message: 'Resumes uploaded. Starting search & rank...', type: 'success' });
+      }
+
       const result = await searchCandidates(currentJd.jd_id, chatMessage);
       setCandidates(result);
 
       if (result.length > 0) {
-        setUploadStatus({ message: `Found and ranked ${result.length} new candidates!`, type: 'success' });
+        setUploadStatus({ message: `Found and ranked ${result.length} total candidates!`, type: 'success' });
       } else {
         setUploadStatus({ message: 'Search complete. No new candidates were found.', type: 'success' });
       }
@@ -97,7 +149,6 @@ export function SearchPage({ user }: { user: User }) {
       <Header userName={userName} showBackButton={true} />
       <main className="flex-grow p-4 sm:p-6 md:p-8 max-w-screen-2xl mx-auto w-full overflow-y-hidden min-h-0">
         <div className="grid grid-cols-12 gap-8 h-full">
-          {/* Left Sidebar for Controls */}
           <aside className="col-span-3 flex flex-col gap-6 overflow-y-auto pb-4">
              <div className="p-4 bg-white rounded-lg border border-gray-200 flex-shrink-0">
               <div className="flex justify-between items-center mb-2">
@@ -107,15 +158,25 @@ export function SearchPage({ user }: { user: User }) {
                 </button>
                 <input type="file" ref={jdInputRef} onChange={handleJdFileChange} className="hidden" accept=".pdf,.docx,.txt"/>
               </div>
-              {currentJd ? (
-                <div className="w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-sm">
-                  {currentJd.jd_parsed_summary.substring(0, 50)}...
-                </div>
-              ) : (
-                <div className="w-full p-2 border border-gray-300 rounded-md bg-gray-100 text-sm text-gray-500">
-                  Upload a JD to begin
-                </div>
-              )}
+              
+              {/* --- 6. The UI is now a dropdown menu --- */}
+              <select
+                value={currentJd?.jd_id || ''}
+                onChange={(e) => handleJdSelection(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-sm"
+                disabled={userJds.length === 0}
+              >
+                {userJds.length > 0 ? (
+                  userJds.map(jd => (
+                    <option key={jd.jd_id} value={jd.jd_id}>
+                      {jd.title}
+                    </option>
+                  ))
+                ) : (
+                  <option disabled value="">Upload a JD to begin</option>
+                )}
+              </select>
+
               {currentJd && (
                 <div className="mt-4 text-sm text-gray-600 space-y-2">
                   <p><span className="font-medium">Location:</span> {currentJd.location}</p>
@@ -123,6 +184,7 @@ export function SearchPage({ user }: { user: User }) {
                   <p><span className="font-medium">Experience:</span> {currentJd.experience_required}</p>
                 </div>
               )}
+              {/* --- The rest of the UI and logic is preserved --- */}
               <div className="mt-4 flex flex-col items-stretch gap-2 text-sm">
                 <button className="flex items-center justify-center gap-2 p-2 rounded-md bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-700 font-medium">
                   <Eye size={16} /> View JD
@@ -157,7 +219,6 @@ export function SearchPage({ user }: { user: User }) {
             )}
           </aside>
           
-          {/* Main Content Area */}
           <div className="col-span-9 flex flex-col gap-8 h-full min-h-0">
             <div className="p-6 bg-white rounded-lg border border-gray-200 flex flex-col flex-grow min-h-0">
               <div className="flex-shrink-0">
@@ -179,9 +240,6 @@ export function SearchPage({ user }: { user: User }) {
               </div>
               
               <div className="flex-grow overflow-y-auto">
-                {/* --- FINAL CHANGE --- */}
-                {/* We now pass the entire `candidate` object to the row component. */}
-                {/* This simplifies the code and makes the component responsible for its own data. */}
                 {candidates.map((candidate) => (
                   <CandidateRow key={candidate.profile_id} candidate={candidate} />
                 ))}

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 # --- MODIFICATION: Ensure the new 'search' router is imported ---
 from .routers import auth, health, me, orgs, superadmin, favorites, upload, roles, search
-
+# Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Recruiter Platform API",
     description="API for the multi-tenant recruiter platform.",
@@ -47,9 +47,10 @@ app.include_router(upload.router)
 app.include_router(orgs.router)
 app.include_router(superadmin.router, prefix="/superadmin", tags=["Super Admin"])
 app.include_router(favorites.router, tags=["Favorites"])
-app.include_router(roles.router, prefix="/roles", tags=["Roles"])
+# app.include_router(roles.router, prefix="/roles", tags=["Roles"])
 # --- MODIFICATION: Ensure the new search router is included ---
 app.include_router(search.router, prefix="/search", tags=["Search"])
+app.include_router(roles.router, prefix="/roles", tags=["Roles & JDs"])
 
 
 @app.get("/", tags=["Health Check"])

@@ -1,47 +1,76 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List
+from pydantic import BaseModel
+from typing import List, Optional
+import uuid
 
-from .. import models
-from ..db.session import get_db
-from ..dependencies import get_current_user
-# CORRECTED: Importing the specific schema directly
-from ..schemas.jd import JDSchema
+# Use the specific dependencies and models required for this router
+from app.dependencies import get_current_user, get_supabase_client
+from app.models.user import User
 
-router = APIRouter()
+# --- THIS IS THE FIX ---
+# The prefix="/roles" has been removed from the router definition.
+# The prefix is now correctly handled only in the main.py file where the router is included.
+router = APIRouter(
+    tags=["Roles & JDs"],
+)
 
-@router.get("/roles", response_model=List[JDSchema]) # CORRECTED: Using the direct import
-def read_roles_for_organization(
-    db: Session = Depends(get_db),
-    current_user: models.user.User = Depends(get_current_user)
+# --- Pydantic Response Model ---
+# This defines the exact structure of the data we'll send to the frontend.
+class JdSummary(BaseModel):
+    jd_id: uuid.UUID
+    title: str  # This title is generated for the dropdown UI
+    location: Optional[str] = None
+    job_type: Optional[str] = None
+    experience_required: Optional[str] = None
+    jd_parsed_summary: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/", response_model=List[JdSummary])
+async def get_user_jds(
+    current_user: User = Depends(get_current_user),
+    supabase = Depends(get_supabase_client)
 ):
     """
-    Retrieve all job descriptions for the current user's organization.
-
-    This works by first finding all users in the organization and then
-    collecting all JDs associated with those users.
+    Fetches a list of all Job Descriptions (JDs) that have been
+    uploaded by the currently authenticated user.
     """
-    if not current_user.organization_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Operation not allowed: User is not associated with an organization."
-        )
+    try:
+        # Query fetches all JDs where the user_id matches the current user's ID.
+        response = supabase.table("jds").select(
+            "jd_id", 
+            "jd_parsed_summary", 
+            "location", 
+            "job_type", 
+            "experience_required"
+        ).eq("user_id", str(current_user.id)).execute()
 
-    # Step 1: Find all user IDs within the same organization as the current user.
-    users_in_org = db.query(models.user.User.id).filter(
-        models.user.User.organization_id == current_user.organization_id
-    ).all()
-    
-    # Extract the UUIDs from the query result
-    user_ids_in_org = [user_id for (user_id,) in users_in_org]
+        if not response.data:
+            return []
+        
+        # Manually construct the response to create a 'title' for the dropdown UI.
+        jds_to_return = []
+        for item in response.data:
+            summary = item.get("jd_parsed_summary", "Untitled Role")
+            # The title is derived from the first line of the summary.
+            title = summary.split('\n')[0].strip() if summary else "Untitled Role"
+            
+            # Create a JdSummary object to ensure type safety
+            jd_summary = JdSummary(
+                jd_id=item["jd_id"],
+                title=title,
+                location=item.get("location"),
+                job_type=item.get("job_type"),
+                experience_required=item.get("experience_required"),
+                jd_parsed_summary=summary
+            )
+            jds_to_return.append(jd_summary)
 
-    if not user_ids_in_org:
-        return [] # Return empty list if no users are in the organization
+        return jds_to_return
 
-    # Step 2: Fetch all JDs where the user_id is in our list of organization members.
-    roles = db.query(models.jd.JD).filter(
-        models.jd.JD.user_id.in_(user_ids_in_org)
-    ).all()
-
-    return roles
+    except Exception as e:
+        print(f"Error fetching JDs for user {current_user.id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch job descriptions.")
 
