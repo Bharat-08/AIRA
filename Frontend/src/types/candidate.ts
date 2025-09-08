@@ -1,12 +1,14 @@
-// src/types/candidate.ts
+// Defines the possible states for a candidate in the pipeline, used on the Pipeline page.
 export type CandidateStatus = 'Favourited' | 'Contacted';
 export type CandidateStage = 'Rejected' | 'Offer Extended' | 'Interviewing' | 'In Consideration';
 
-// This array is correctly exported and used by the Pipeline page
+// An array of stages, used to populate dropdowns on the Pipeline page.
 export const candidateStages: CandidateStage[] = ['In Consideration', 'Interviewing', 'Offer Extended', 'Rejected'];
 
-// RENAMED: This interface is now specific to the pipeline page's data structure.
-// This preserves the logic for your existing Pipeline page.
+/**
+ * This interface is specifically for the Pipeline page, which has a different
+ * data structure and UI requirements than the search results.
+ */
 export interface PipelineCandidate {
   id: string;
   name: string;
@@ -16,19 +18,31 @@ export interface PipelineCandidate {
   stage: CandidateStage;
 }
 
-// NEW: This new interface matches the data structure for the Search page UI.
-// It only includes fields that the UI is designed to display.
+/**
+ * --- FINAL VERSION ---
+ * This is the primary interface for the Search page.
+ * It is now aligned with the full data structure returned by the
+ * `get_ranked_candidates_with_details` RPC function and the `search.py` API endpoint.
+ */
 export interface Candidate {
-  // This will be the main name displayed in the "Candidate" column.
-  full_name: string;
-
-  // These are used to construct the subtitle (e.g., "Software Engineer at TechCorp").
-  current_title: string;
-  current_company: string;
-
-  // This is required for the "Match Score" column.
+  // Unique identifier from the database, used for keys and future actions.
+  profile_id: string;
+  
+  // The numerical score from the ranking agent, used for the progress pill.
   match_score: number;
 
-  // While not directly displayed as a column, this can be used for the profile link icon.
-  validated_url?: string | null;
+  // The detailed text summary from the ranking agent (strengths, weaknesses).
+  strengths: string;
+
+  // The full name of the candidate.
+  profile_name: string | null;
+
+  // The candidate's job title.
+  role: string | null;
+
+  // The candidate's current company.
+  company: string | null;
+
+  // The URL to the candidate's profile (e.g., LinkedIn).
+  profile_url: string | null;
 }

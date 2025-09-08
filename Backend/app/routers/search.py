@@ -7,31 +7,41 @@ from typing import List, Optional
 from ..dependencies import get_current_user
 from ..models.user import User
 
+# It's good practice to wrap potentially missing imports in a try/except block
+# This makes it clear that these are external dependencies for this router.
 try:
-    # Import both agents
     from test_searcher import ErrorFixedDeepResearchAgent
     from ranker import ProfileRanker, Config as RankerConfig
 except ImportError as e:
     raise ImportError(f"Could not import an agent. Ensure test_searcher.py and ranker.py are in the project root. Details: {e}")
 
-# Define the request and response models
+# --- Pydantic Models for API Request and Response ---
+
 class SearchRequest(BaseModel):
+    """Defines the expected input for a search request."""
     jd_id: str
     prompt: str
 
 class RankedCandidateResponse(BaseModel):
+    """
+    Defines the structure of the candidate data returned to the frontend.
+    This model now includes all fields required by the UI design.
+    """
     profile_id: str
     match_score: float
-    strengths: str # This contains the formatted summary from the ranker
-    # Add other fields you might want to display from the ranked_candidates table
+    strengths: str
     profile_name: Optional[str] = None
     role: Optional[str] = None
     company: Optional[str] = None
+    # --- CHANGE: Added profile_url to match frontend requirements ---
+    profile_url: Optional[str] = None
 
+# --- Router Initialization ---
 
 router = APIRouter()
 
-# Initialize both agents
+# --- Agent Initialization ---
+# Initialize agents globally to be reused across requests.
 try:
     search_agent = ErrorFixedDeepResearchAgent()
     print("Successfully initialized ErrorFixedDeepResearchAgent.")
@@ -41,9 +51,13 @@ try:
     print("Successfully initialized ProfileRanker.")
 
 except Exception as e:
+    # If agents fail to initialize, log the error and set them to None.
+    # The endpoint will then return a 503 Service Unavailable error.
     print(f"FATAL: Failed to initialize an agent: {e}")
     search_agent = None
     ranker_agent = None
+
+# --- API Endpoint ---
 
 @router.post("/search", response_model=List[RankedCandidateResponse])
 async def search_and_rank_candidates(
@@ -52,9 +66,9 @@ async def search_and_rank_candidates(
 ):
     """
     Orchestrates the full search-then-rank workflow.
-    1. Runs the search agent to find new candidates and save them.
+    1. Runs the search agent to find new candidates and save them to the 'search' table.
     2. Runs the ranking agent to score all unranked candidates for the job.
-    3. Fetches the final ranked candidates (including name, role, etc.) and returns them.
+    3. Fetches the final ranked candidates with full details and returns them.
     """
     if not search_agent or not ranker_agent:
         raise HTTPException(status_code=503, detail="An agent is not available due to an initialization error.")
@@ -71,7 +85,7 @@ async def search_and_rank_candidates(
 
         # === STEP 2: Run the Ranking Agent ===
         print(f"Step 2: Ranking all unranked candidates for JD ID: {request.jd_id}...")
-        # We pass the user's ID to the ranker's config to ensure it operates in the correct user context
+        # Pass the user's ID to the ranker's config to operate in the correct user context.
         ranker_agent.config.user_id = str(current_user.id)
         await ranker_agent.run_ranking_for_api(jd_id=request.jd_id)
         print("Step 2 Complete: Ranking finished.")
@@ -79,9 +93,9 @@ async def search_and_rank_candidates(
         # === STEP 3: Fetch and Join Ranked Results ===
         print("Step 3: Fetching final ranked candidates with full details...")
         
-        # This query joins the ranked results with the original search/resume data
-        # to get all the details (name, role, etc.) needed for the frontend.
-        rpc_params = {'p_jd_id': request.jd_id}
+        # This RPC function joins 'ranked_candidates' with 'search' to get all details.
+        # Ensure 'get_ranked_candidates_with_details' is created in Supabase.
+        rpc_params = {'jd_id_param': request.jd_id}
         ranked_response = ranker_agent.supabase.rpc('get_ranked_candidates_with_details', rpc_params).execute()
         
         if ranked_response.data:

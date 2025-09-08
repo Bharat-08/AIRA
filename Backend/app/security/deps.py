@@ -3,7 +3,7 @@
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.config import settings
-from app.db.session import get_db  # <-- CORRECTED IMPORT
+from app.db.session import get_db
 from app.models.user import User
 from app.models.membership import Membership
 from .jwt import verify_jwt
@@ -28,6 +28,14 @@ def require_user(claims=Depends(get_current_session), db: Session = Depends(get_
     ).one_or_none()
     
     return {"claims": claims, "user": user, "membership": membership}
+
+# --- NEW FUNCTION TO SOLVE THE IMPORT ERROR ---
+def get_current_user(ctx=Depends(require_user)) -> User:
+    """
+    Depends on require_user and returns just the User model instance.
+    This is what your API endpoints should use for type-hinting the current user.
+    """
+    return ctx["user"]
 
 def require_admin(ctx=Depends(require_user)):
     if not ctx["membership"] or ctx["membership"].role != "admin":
