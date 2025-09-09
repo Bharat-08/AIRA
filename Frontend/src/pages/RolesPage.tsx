@@ -1,47 +1,63 @@
 import React, { useState, useEffect } from 'react';
-import { Header } from '../components/layout/Header';
+import type { Role } from '../types/role';
+import { mockRoles } from '../api/roles';
 import RoleList from '../components/roles/RoleList';
 import RoleDetails from '../components/roles/RoleDetails';
-import type { Role } from '../types/role';
-import type { User } from '../types/user';
-import { mockRoles } from '../api/roles';
+import { Header } from '../components/layout/Header';
+// import { User } from '../types/user';
 
 // --- THIS IS THE FIX ---
-// This component is exported as a default export.
-// This is required by the App.tsx file which imports it using: `import RolesPage from ...`
-// If the build error persists, it is likely a Docker cache issue.
-export default function RolesPage({ user }: { user: User }) {
+// The component is no longer expecting a `user` prop, which was causing it to crash.
+// We've also removed the unused 'User' type import.
+export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const userName = user.name || 'User';
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  
+  // The user name can be hardcoded or fetched differently if needed later.
+  const userName = 'User';
 
   useEffect(() => {
-    const rolesData = mockRoles; 
+    // This logic correctly uses the mock data from roles.ts
+    const rolesData = mockRoles;
     setRoles(rolesData);
-    
+
     if (rolesData.length > 0) {
       setSelectedRole(rolesData[0]);
     }
+    setIsLoading(false);
   }, []);
 
-  const handleSelectRole = (role: Role) => {
-    setSelectedRole(role);
-  };
-
   return (
-    <div className="h-screen bg-gray-50 text-gray-800 flex flex-col">
+    <div className="flex flex-col min-h-screen bg-slate-50 font-sans">
       <Header userName={userName} />
-      <main className="flex-grow p-4 sm:p-6 md:p-8 max-w-screen-2xl mx-auto w-full overflow-y-hidden">
-        <div className="grid grid-cols-12 gap-8 h-full">
-          <div className="col-span-4 h-full overflow-y-auto">
-            <RoleList roles={roles} onSelectRole={handleSelectRole} selectedRoleId={selectedRole?.id} />
+      <main className="flex-grow p-6">
+        <div className="flex h-full max-h-[calc(100vh-112px)] bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+          {/* Left Pane */}
+          <div className="w-[380px] flex-shrink-0 border-r border-slate-100 flex flex-col">
+            {isLoading ? (
+              <div className="flex-grow flex items-center justify-center">
+                <p className="text-slate-500">Loading roles...</p>
+              </div>
+            ) : (
+              <RoleList
+                roles={roles}
+                selectedRoleId={selectedRole?.id}
+                onSelectRole={setSelectedRole}
+              />
+            )}
           </div>
-          <div className="col-span-8 h-full overflow-y-auto">
-            {selectedRole ? (
+          {/* Right Pane */}
+          <div className="flex-grow p-8 overflow-y-auto">
+            {isLoading ? (
+               <div className="flex h-full items-center justify-center">
+                 <p className="text-slate-500">Loading details...</p>
+              </div>
+            ) : selectedRole ? (
               <RoleDetails role={selectedRole} />
             ) : (
-              <div className="flex items-center justify-center h-full bg-white rounded-lg border">
-                <p className="text-gray-500">Select a role to see the details.</p>
+              <div className="flex h-full items-center justify-center">
+                 <p className="text-slate-500">Select a role to view details.</p>
               </div>
             )}
           </div>

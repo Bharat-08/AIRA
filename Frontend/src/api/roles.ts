@@ -2,7 +2,6 @@ import type { Role } from '../types/role';
 
 // --- MOCK DATA SECTION (Preserved for RolesPage) ---
 
-// A fixed "current" date to ensure the time-ago logic is consistent
 const now = new Date('2024-06-12T10:00:00Z'); 
 
 const daysAgo = (days: number) => {
@@ -22,6 +21,9 @@ export const mockRoles: Role[] = [
     description: [
       'We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.',
       'You will work closely with other engineers, product managers, and designers to deliver innovative and impactful products.',
+      'We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.','We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.',
+      'You will work closely with other engineers, product managers, and designers to deliver innovative and impactful products.',
+      'We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.'
     ],
     experience: '5+ years',
     keyRequirements: ['React', 'Node.js', 'PostgreSQL', 'AWS'],
@@ -30,6 +32,29 @@ export const mockRoles: Role[] = [
   {
     id: '2',
     title: 'Product Manager',
+    location: 'San Francisco',
+    createdAt: daysAgo(10),
+    updatedAt: '2024-06-05T00:00:00Z',
+    description: ['Define product vision, strategy, and roadmap. Work with cross-functional teams to design, build, and roll-out products that deliver the company’s vision and strategy.'],
+    experience: '4+ years',
+    keyRequirements: ['Agile', 'Roadmapping', 'User Research'],
+    candidateStats: { liked: 25, contacted: 10 },
+  },
+  // --- THIS IS THE FIX: IDs are now unique ---
+  {
+    id: '4', // Formerly '2'
+    title: 'CEO',
+    location: 'San Francisco',
+    createdAt: daysAgo(10),
+    updatedAt: '2024-06-05T00:00:00Z',
+    description: ['Define product vision, strategy, and roadmap. Work with cross-functional teams to design, build, and roll-out products that deliver the company’s vision and strategy.'],
+    experience: '4+ years',
+    keyRequirements: ['Agile', 'Roadmapping', 'User Research'],
+    candidateStats: { liked: 25, contacted: 10 },
+  },
+  {
+    id: '5', // Formerly '2'
+    title: 'CTO',
     location: 'San Francisco',
     createdAt: daysAgo(10),
     updatedAt: '2024-06-05T00:00:00Z',

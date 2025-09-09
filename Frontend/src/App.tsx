@@ -1,4 +1,3 @@
-// src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { LoginPage } from './pages/LoginPage';
@@ -7,7 +6,6 @@ import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { SuperAdminDashboardPage } from './pages/SuperAdminDashboardPage';
 import { SearchPage } from './pages/SearchPage';
 import RolesPage from './pages/RolesPage';
-// ADDED: Import for PipelinePage
 import { PipelinePage } from './pages/PipelinePage';
 
 function App() {
@@ -21,8 +19,6 @@ function App() {
     );
   }
 
-  // This is a protected route component. It checks if a user is logged in.
-  // If not, it redirects to the login page.
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     if (!user) {
       return <Navigate to="/login" />;
@@ -52,18 +48,18 @@ function App() {
 
         <Route path="/roles" element={
           <ProtectedRoute>
+            {/* --- THIS IS THE FIX --- */}
+            {/* The unnecessary 'user' prop has been removed to match the component's definition. */}
             <RolesPage />
           </ProtectedRoute>
         } />
 
-        {/* ADDED: This is the new route for the Pipeline page */}
         <Route path="/pipeline" element={
           <ProtectedRoute>
             {user ? <PipelinePage user={user} /> : <Navigate to="/login" />}
           </ProtectedRoute>
         } />
 
-        {/* Add a fallback route */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

@@ -2,76 +2,67 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
+import threading
 
 # Import dependencies from your app's structure
 from ..dependencies import get_current_user
 from ..models.user import User
 
-# It's good practice to wrap potentially missing imports in a try/except block
-# This makes it clear that these are external dependencies for this router.
 try:
     from test_searcher import ErrorFixedDeepResearchAgent
     from ranker import ProfileRanker, Config as RankerConfig
 except ImportError as e:
     raise ImportError(f"Could not import an agent. Ensure test_searcher.py and ranker.py are in the project root. Details: {e}")
 
-# --- Pydantic Models for API Request and Response ---
+# --- CANCELLATION MECHANISM ---
+# A thread-safe dictionary to store cancellation flags for each user.
+CANCELLATION_FLAGS = {}
+lock = threading.Lock()
+
 
 class SearchRequest(BaseModel):
-    """Defines the expected input for a search request."""
     jd_id: str
     prompt: str
 
 class RankedCandidateResponse(BaseModel):
-    """
-    Defines the structure of the candidate data returned to the frontend.
-    This model now includes all fields required by the UI design.
-    """
     profile_id: str
     match_score: float
     strengths: str
     profile_name: Optional[str] = None
     role: Optional[str] = None
     company: Optional[str] = None
-    # --- CHANGE: Added profile_url to match frontend requirements ---
     profile_url: Optional[str] = None
 
-# --- Router Initialization ---
 
 router = APIRouter()
 
-# --- Agent Initialization ---
-# Initialize agents globally to be reused across requests.
-try:
-    search_agent = ErrorFixedDeepResearchAgent()
-    print("Successfully initialized ErrorFixedDeepResearchAgent.")
-    
-    ranker_config = RankerConfig.from_env()
-    ranker_agent = ProfileRanker(ranker_config)
-    print("Successfully initialized ProfileRanker.")
+# Initialize agents
+search_agent = ErrorFixedDeepResearchAgent()
+ranker_config = RankerConfig.from_env()
+ranker_agent = ProfileRanker(ranker_config)
 
-except Exception as e:
-    # If agents fail to initialize, log the error and set them to None.
-    # The endpoint will then return a 503 Service Unavailable error.
-    print(f"FATAL: Failed to initialize an agent: {e}")
-    search_agent = None
-    ranker_agent = None
 
-# --- API Endpoint ---
+# --- NEW ENDPOINT TO CANCEL A SEARCH ---
+@router.post("/cancel")
+async def cancel_search(current_user: User = Depends(get_current_user)):
+    """Sets the cancellation flag for the current user to True."""
+    user_id = str(current_user.id)
+    with lock:
+        CANCELLATION_FLAGS[user_id] = True
+    print(f"Cancellation request received for user: {user_id}")
+    return {"message": "Search cancellation requested."}
 
-@router.post("/search", response_model=List[RankedCandidateResponse])
+
+@router.post("/search")
 async def search_and_rank_candidates(
     request: SearchRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Orchestrates the full search-then-rank workflow.
-    1. Runs the search agent to find new candidates and save them to the 'search' table.
-    2. Runs the ranking agent to score all unranked candidates for the job.
-    3. Fetches the final ranked candidates with full details and returns them.
-    """
-    if not search_agent or not ranker_agent:
-        raise HTTPException(status_code=503, detail="An agent is not available due to an initialization error.")
+    user_id = str(current_user.id)
+    
+    # Reset the cancellation flag at the beginning of a new search
+    with lock:
+        CANCELLATION_FLAGS[user_id] = False
 
     try:
         # === STEP 1: Run the Search Agent ===
@@ -79,32 +70,34 @@ async def search_and_rank_candidates(
         unranked_candidates = search_agent.run_search_for_api(
             jd_id=request.jd_id,
             custom_prompt=request.prompt,
-            user_id=str(current_user.id)
+            user_id=user_id
         )
         print(f"Step 1 Complete: Found {len(unranked_candidates)} new candidates.")
 
+        # === CHECK CANCELLATION FLAG ===
+        with lock:
+            if CANCELLATION_FLAGS.get(user_id):
+                print(f"Search cancelled by user {user_id} after research phase.")
+                raise HTTPException(status_code=499, detail="Search cancelled by user.")
+
         # === STEP 2: Run the Ranking Agent ===
         print(f"Step 2: Ranking all unranked candidates for JD ID: {request.jd_id}...")
-        # Pass the user's ID to the ranker's config to operate in the correct user context.
-        ranker_agent.config.user_id = str(current_user.id)
+        ranker_agent.config.user_id = user_id
         await ranker_agent.run_ranking_for_api(jd_id=request.jd_id)
         print("Step 2 Complete: Ranking finished.")
 
         # === STEP 3: Fetch and Join Ranked Results ===
         print("Step 3: Fetching final ranked candidates with full details...")
-        
-        # This RPC function joins 'ranked_candidates' with 'search' to get all details.
-        # Ensure 'get_ranked_candidates_with_details' is created in Supabase.
         rpc_params = {'jd_id_param': request.jd_id}
         ranked_response = ranker_agent.supabase.rpc('get_ranked_candidates_with_details', rpc_params).execute()
         
-        if ranked_response.data:
-            print(f"Step 3 Complete: Found {len(ranked_response.data)} ranked candidates to return.")
-            return ranked_response.data
-        else:
-            print("Step 3 Complete: No ranked candidates found for this JD.")
-            return []
+        return ranked_response.data if ranked_response.data else []
         
+    except HTTPException as http_exc:
+        # Re-raise cancellation exceptions so the frontend knows to stop quietly
+        if http_exc.status_code == 499:
+            return []
+        raise http_exc
     except Exception as e:
         import traceback
         traceback.print_exc()

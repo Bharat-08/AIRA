@@ -1,15 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Header } from '../components/layout/Header';
 import { CandidateRow } from '../components/ui/CandidateRow';
-import { Plus, UploadCloud, Search as SearchIcon, SendHorizonal, Bot, Eye, History } from 'lucide-react';
+import { Plus, UploadCloud, Search as SearchIcon, SendHorizonal, Bot, Eye, History, RefreshCw, XCircle } from 'lucide-react';
 import type { User } from '../types/user';
 import { uploadJdFile, uploadResumeFiles } from '../api/upload';
-// --- 1. Import the new API function and interface ---
 import { fetchJdsForUser, type JdSummary } from '../api/roles';
-import { searchCandidates } from '../api/search';
+// Import the stopSearch function
+import { searchCandidates, stopSearch } from '../api/search';
 import type { Candidate } from '../types/candidate';
 
-// This interface is used for the currently selected JD's full details
+// Loader component for visual feedback during search
+const Loader = () => (
+  <svg className="animate-spin h-5 w-5 text-teal-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+);
+
 interface JobDescriptionDetails {
   jd_id: string;
   jd_parsed_summary: string;
@@ -21,40 +28,34 @@ interface JobDescriptionDetails {
 export function SearchPage({ user }: { user: User }) {
   const userName = user.name || 'User';
 
-  // --- 2. Add state to hold the list of all of the user's JDs ---
   const [userJds, setUserJds] = useState<JdSummary[]>([]);
-  
-  // This state will hold the full details of the JD selected from the dropdown
   const [currentJd, setCurrentJd] = useState<JobDescriptionDetails | null>(null);
-  
   const [resumeFiles, setResumeFiles] = useState<FileList | null>(null);
   const [isJdLoading, setIsJdLoading] = useState(false);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const jdInputRef = useRef<HTMLInputElement>(null);
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
-  // --- 3. Fetch all JDs when the component first loads ---
   useEffect(() => {
     const loadUserJds = async () => {
       try {
         const jds = await fetchJdsForUser();
         setUserJds(jds);
-        // If the user has JDs, automatically select the first one
         if (jds.length > 0) {
-          handleJdSelection(jds[0].jd_id);
+          handleJdSelection(jds[0].jd_id, jds);
         }
       } catch (error) {
         setUploadStatus({ message: 'Could not load your saved roles.', type: 'error' });
       }
     };
     loadUserJds();
-  }, []); // Empty dependency array means this runs once when the component mounts
+  }, []);
 
-  // --- 4. Handle a new JD file being uploaded ---
   const handleJdFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
@@ -62,11 +63,9 @@ export function SearchPage({ user }: { user: User }) {
       setUploadStatus(null);
       try {
         const newJd = await uploadJdFile(file);
-        // After a successful upload, refresh the list of JDs
         const updatedJds = await fetchJdsForUser();
         setUserJds(updatedJds);
-        // Automatically select the newly uploaded JD in the dropdown
-        handleJdSelection(newJd.jd_id);
+        handleJdSelection(newJd.jd_id, updatedJds);
         setUploadStatus({ message: 'JD uploaded and selected!', type: 'success' });
       } catch (error) {
         setUploadStatus({ message: (error as Error).message, type: 'error' });
@@ -76,12 +75,9 @@ export function SearchPage({ user }: { user: User }) {
     }
   };
   
-  // --- 5. Handle the user selecting a JD from the dropdown ---
-  const handleJdSelection = (selectedJdId: string) => {
-    // Find the full details of the selected JD from the list we fetched
-    const selectedJd = userJds.find(jd => jd.jd_id === selectedJdId);
+  const handleJdSelection = (selectedJdId: string, jds: JdSummary[]) => {
+    const selectedJd = jds.find(jd => jd.jd_id === selectedJdId);
     if (selectedJd) {
-      // Set the `currentJd` state to display its details
       setCurrentJd({
         jd_id: selectedJd.jd_id,
         jd_parsed_summary: selectedJd.jd_parsed_summary || '',
@@ -89,13 +85,12 @@ export function SearchPage({ user }: { user: User }) {
         job_type: selectedJd.job_type || 'N/A',
         experience_required: selectedJd.experience_required || 'N/A',
       });
-      // Clear out results from any previous search
       setCandidates([]);
       setUploadStatus(null);
+      setHasSearched(false);
     }
   };
 
-  // --- (Other functions like handleResumeFilesChange and handleSearchAndRank are preserved) ---
   const handleResumeFilesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       setResumeFiles(event.target.files);
@@ -114,6 +109,7 @@ export function SearchPage({ user }: { user: User }) {
 
     setIsRankingLoading(true);
     setUploadStatus(null);
+    setHasSearched(true);
     try {
       if (resumeFiles && resumeFiles.length > 0) {
         await uploadResumeFiles(resumeFiles, currentJd.jd_id);
@@ -132,16 +128,45 @@ export function SearchPage({ user }: { user: User }) {
       }
 
     } catch (error) {
+       if ((error as Error).message !== 'Search cancelled by user.') {
+        setUploadStatus({ message: (error as Error).message, type: 'error' });
+      }
+    } finally {
+      setIsRankingLoading(false);
+    }
+  };
+  
+  const handleStopSearch = async () => {
+    try {
+      await stopSearch();
+      setUploadStatus({ message: 'Search has been stopped.', type: 'success' });
+    } catch (error) {
       setUploadStatus({ message: (error as Error).message, type: 'error' });
     } finally {
       setIsRankingLoading(false);
     }
   };
 
-  const getButtonText = () => {
-    if (isJdLoading) return 'Parsing JD...';
-    if (isRankingLoading) return 'Searching & Ranking...';
-    return <><SearchIcon size={18}/> Search and Rank</>;
+  const getMainActionButton = () => {
+    if (isRankingLoading) {
+      return (
+        <button 
+          onClick={handleStopSearch} 
+          className="w-full bg-red-600 text-white font-semibold py-3 rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 transition-colors"
+        >
+          <XCircle size={18}/> Stop Search
+        </button>
+      );
+    }
+    return (
+      <button 
+        onClick={handleSearchAndRank} 
+        disabled={isJdLoading} 
+        className="w-full bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700 flex items-center justify-center gap-2 disabled:bg-gray-400 transition-colors"
+      >
+        <SearchIcon size={18}/> Search and Rank
+      </button>
+    );
   };
 
   return (
@@ -159,10 +184,9 @@ export function SearchPage({ user }: { user: User }) {
                 <input type="file" ref={jdInputRef} onChange={handleJdFileChange} className="hidden" accept=".pdf,.docx,.txt"/>
               </div>
               
-              {/* --- 6. The UI is now a dropdown menu --- */}
               <select
                 value={currentJd?.jd_id || ''}
-                onChange={(e) => handleJdSelection(e.target.value)}
+                onChange={(e) => handleJdSelection(e.target.value, userJds)}
                 className="w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-sm"
                 disabled={userJds.length === 0}
               >
@@ -184,7 +208,6 @@ export function SearchPage({ user }: { user: User }) {
                   <p><span className="font-medium">Experience:</span> {currentJd.experience_required}</p>
                 </div>
               )}
-              {/* --- The rest of the UI and logic is preserved --- */}
               <div className="mt-4 flex flex-col items-stretch gap-2 text-sm">
                 <button className="flex items-center justify-center gap-2 p-2 rounded-md bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-700 font-medium">
                   <Eye size={16} /> View JD
@@ -209,9 +232,7 @@ export function SearchPage({ user }: { user: User }) {
               </button>
               <input type="file" ref={resumeInputRef} onChange={handleResumeFilesChange} className="hidden" accept=".pdf,.docx,.txt" multiple/>
             </div>
-            <button onClick={handleSearchAndRank} disabled={isJdLoading || isRankingLoading} className="w-full bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700 flex items-center justify-center gap-2 disabled:bg-gray-400 flex-shrink-0">
-              {getButtonText()}
-            </button>
+            {getMainActionButton()}
             {uploadStatus && (
               <div className={`mt-4 p-3 rounded-md text-sm text-center flex-shrink-0 ${uploadStatus.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                 {uploadStatus.message}
@@ -224,12 +245,19 @@ export function SearchPage({ user }: { user: User }) {
               <div className="flex-shrink-0">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-lg font-semibold">Top Matching Candidates</h2>
-                  {isRankingLoading && <div className="animate-pulse h-4 w-24 bg-gray-200 rounded-md"></div>}
+                  {isRankingLoading && (
+                    <div className="flex items-center gap-2 text-sm text-teal-600">
+                      <Loader />
+                      <span>Searching & Ranking...</span>
+                    </div>
+                  )}
                 </div>
                 <p className="text-sm text-gray-500 mb-4 h-5">
-                  {isRankingLoading ? "The AI agent is searching and ranking candidates..." : 
-                   candidates.length > 0 ? `Found and ranked ${candidates.length} candidates.` :
-                   "Enter a prompt and click 'Search and Rank' to find candidates."}
+                  {!isRankingLoading && (
+                    candidates.length > 0 
+                      ? `Found and ranked ${candidates.length} candidates.` 
+                      : "Enter a prompt and click 'Search and Rank' to find candidates."
+                  )}
                 </p>
                 <div className="grid grid-cols-12 text-xs font-semibold text-gray-500 uppercase py-2 border-b-2">
                   <div className="col-span-4">Candidate</div>
@@ -239,7 +267,7 @@ export function SearchPage({ user }: { user: User }) {
                 </div>
               </div>
               
-              <div className="flex-grow overflow-y-auto">
+              <div className="flex-grow overflow-y-auto max-h-[30vh]">
                 {candidates.map((candidate) => (
                   <CandidateRow key={candidate.profile_id} candidate={candidate} />
                 ))}
@@ -251,19 +279,51 @@ export function SearchPage({ user }: { user: User }) {
                   <h3 className="text-base font-semibold text-gray-800">Refine Search with AIRA</h3>
                   <Bot size={16} className="text-teal-600"/>
                 </div>
+                
+                <div className="flex flex-col gap-4 mb-4">
+                    <div className="self-start">
+                        <button className="flex items-center gap-2 text-sm text-left p-3 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors text-gray-700">
+                            <Bot size={16} className="text-teal-600 flex-shrink-0"/>
+                            <span>Find candidates with 5+ years of SaaS experience.</span>
+                        </button>
+                    </div>
+                    {hasSearched && (
+                      <div className="self-end">
+                          <div className="p-3 text-sm rounded-lg bg-green-100 text-green-800">
+                             Okay, filtering for candidates... Here are the top results.
+                          </div>
+                      </div>
+                    )}
+                </div>
+
                 <div className="relative">
                     <input
                         type="text"
                         value={chatMessage}
                         onChange={(e) => setChatMessage(e.target.value)}
-                        placeholder="Enter your prompt here, e.g., Find senior developers..."
+                        placeholder="Chat with AIRA..."
                         className="w-full pl-4 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                        onKeyDown={(e) => e.key === 'Enter' && handleSearchAndRank()}
+                        onKeyDown={(e) => e.key === 'Enter' && !isRankingLoading && handleSearchAndRank()}
+                        disabled={isRankingLoading}
                     />
-                    <button onClick={handleSearchAndRank} className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-teal-600">
-                        <SendHorizonal size={20} />
+                    <button 
+                      onClick={isRankingLoading ? handleStopSearch : handleSearchAndRank} 
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-teal-600"
+                    >
+                      {isRankingLoading ? <XCircle size={20} className="text-red-500"/> : <SendHorizonal size={20} />}
                     </button>
                 </div>
+
+                {hasSearched && !isRankingLoading && (
+                  <div className="flex justify-end pt-4">
+                      <button 
+                        onClick={handleSearchAndRank}
+                        className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+                      >
+                          <RefreshCw size={14} /> Rerun Search
+                      </button>
+                  </div>
+                )}
             </div>
           </div>
         </div>
