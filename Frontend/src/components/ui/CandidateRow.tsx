@@ -19,7 +19,7 @@ export function CandidateRow({ candidate }: CandidateRowProps) {
     <div className="grid grid-cols-12 items-center py-3 border-b border-gray-200 text-sm">
       
       {/* Column 1: Candidate Name, Role, and Company */}
-      <div className="col-span-4 flex items-center gap-3">
+      <div className="col-span-6 flex items-center gap-3">
         <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-gray-200 text-gray-600 rounded-full font-semibold">
           {avatarInitial}
         </div>
@@ -50,7 +50,7 @@ export function CandidateRow({ candidate }: CandidateRowProps) {
       </div>
 
       {/* Column 4: Action Buttons */}
-      <div className="col-span-4 flex items-center gap-4 text-gray-500">
+      <div className="col-span-2 flex items-center gap-4 text-gray-500">
         <button className="hover:text-teal-500" title="Favorite"><Star size={18} /></button>
         <button className="hover:text-teal-500" title="Contact"><Send size={18} /></button>
         <button className="hover:text-teal-500" title="Call"><Phone size={18} /></button>

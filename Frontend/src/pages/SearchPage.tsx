@@ -260,10 +260,10 @@ export function SearchPage({ user }: { user: User }) {
                   )}
                 </p>
                 <div className="grid grid-cols-12 text-xs font-semibold text-gray-500 uppercase py-2 border-b-2">
-                  <div className="col-span-4">Candidate</div>
+                  <div className="col-span-6">Candidate</div>
                   <div className="col-span-2">Match Score</div>
                   <div className="col-span-2">Profile Link</div>
-                  <div className="col-span-4">Actions</div>
+                  <div className="col-span-2">Actions</div>
                 </div>
               </div>
               
