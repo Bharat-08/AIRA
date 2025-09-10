@@ -45,4 +45,5 @@ export interface Candidate {
 
   // The URL to the candidate's profile (e.g., LinkedIn).
   profile_url: string | null;
+  linkedin_url: string | null; 
 }

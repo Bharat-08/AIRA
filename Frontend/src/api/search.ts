@@ -58,14 +58,14 @@ export const stopSearch = async (): Promise<{ message: string }> => {
  * @param profileId The ID of the candidate's profile.
  * @returns An object containing the newly generated profile_url.
  */
-export const generateLinkedInUrl = async (profileId: string): Promise<{ profile_url: string }> => {
+export const generateLinkedInUrl = async (profileId: string): Promise<{ linkedin_url: string }> => {
   const response = await fetch(`${API_BASE_URL}/search/generate-linkedin-url`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ profile_id: profileId }),
-    credentials: 'include', // Important for sending the auth cookie
+    credentials: 'include',
   });
 
   if (!response.ok) {

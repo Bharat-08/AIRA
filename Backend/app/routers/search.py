@@ -82,6 +82,7 @@ async def generate_linkedin_url(
     profile_id = request.profile_id
     
     try:
+        # This now calls the method that saves to the 'ranked_candidates' table
         generated_url = linkedin_finder_agent.find_and_update_url(
             profile_id=profile_id,
             supabase=supabase
@@ -93,7 +94,7 @@ async def generate_linkedin_url(
                 detail=f"Could not find a LinkedIn URL for candidate {profile_id}."
             )
 
-        return {"profile_url": generated_url}
+        return {"linkedin_url": generated_url}
 
     except Exception as e:
         import traceback

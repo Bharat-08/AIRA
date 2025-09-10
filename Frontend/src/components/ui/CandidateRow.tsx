@@ -18,7 +18,6 @@ export function CandidateRow({ candidate, onUpdateCandidate }: CandidateRowProps
     : 'C';
 
   const handleLinkedInClick = async () => {
-    // If we have already generated a URL in this session, just open it.
     if (generatedUrl) {
       window.open(generatedUrl, '_blank', 'noopener,noreferrer');
       return;
@@ -29,13 +28,18 @@ export function CandidateRow({ candidate, onUpdateCandidate }: CandidateRowProps
     setIsGeneratingUrl(true);
     setError(null);
     try {
+      
       const result = await generateLinkedInUrl(candidate.profile_id);
-      const newUrl = result.profile_url;
+      const newUrl = result.linkedin_url; // Use the correct key here
 
       if (newUrl) {
         window.open(newUrl, '_blank', 'noopener,noreferrer');
         setGeneratedUrl(newUrl);
-        onUpdateCandidate({ ...candidate, profile_url: newUrl });
+        
+        // This updates the parent state to include the new URL
+        const updatedCandidate = { ...candidate, linkedin_url: newUrl };
+        onUpdateCandidate(updatedCandidate);
+        
       } else {
         throw new Error("API did not return a valid URL.");
       }
@@ -49,16 +53,17 @@ export function CandidateRow({ candidate, onUpdateCandidate }: CandidateRowProps
   };
 
   const renderLinkedInButton = () => {
-    const finalUrl = generatedUrl || candidate.profile_url;
+    // We now check for the new linkedin_url property
+    const finalUrl = generatedUrl || candidate.linkedin_url;
 
-    if (generatedUrl) {
+    if (finalUrl) {
       return (
         <a 
-          href={finalUrl || '#'}
+          href={finalUrl}
           target="_blank" 
           rel="noopener noreferrer" 
           className="text-teal-600 hover:text-teal-700 transition-colors"
-          title="Open LinkedIn Profile"
+          title="Open Generated LinkedIn Profile"
         >
           <Linkedin size={18} />
         </a>
@@ -94,7 +99,6 @@ export function CandidateRow({ candidate, onUpdateCandidate }: CandidateRowProps
 
   return (
     <div className="grid grid-cols-12 items-center py-3 border-b border-gray-200 text-sm">
-      {/* Columns 1 and 2 are unchanged */}
       <div className="col-span-6 flex items-center gap-3">
         <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-gray-200 text-gray-600 rounded-full font-semibold">
           {avatarInitial}
@@ -116,19 +120,16 @@ export function CandidateRow({ candidate, onUpdateCandidate }: CandidateRowProps
         </div>
       </div>
 
-      {/* --- THIS IS THE FIX --- */}
-      {/* Both icons are now in the "Profile Link" column, with a gap between them */}
       <div className="col-span-2 flex items-center gap-4">
-        {/* Original Link Icon */}
-        <a href={generatedUrl || candidate.profile_url || '#'} target="_blank" rel="noopener noreferrer" 
-           className={(generatedUrl || candidate.profile_url) ? "text-teal-600 hover:text-teal-700" : "text-gray-400 cursor-not-allowed"}>
+        <a href={candidate.profile_url || '#'} target="_blank" rel="noopener noreferrer" 
+           className={candidate.profile_url ? "text-teal-600 hover:text-teal-700" : "text-gray-400 cursor-not-allowed"}
+           title="Open Original Profile URL">
           <LinkIcon size={18} />
         </a>
-        {/* New Interactive LinkedIn Icon */}
+        
         {renderLinkedInButton()}
       </div>
 
-      {/* Column 4: Action Buttons (Reverted to original state) */}
       <div className="col-span-2 flex items-center gap-4 text-gray-500">
         <button className="hover:text-teal-500" title="Favorite"><Star size={18} /></button>
         <button className="hover:text-teal-500" title="Contact"><Send size={18} /></button>
