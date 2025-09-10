@@ -5,7 +5,6 @@ import { Plus, UploadCloud, Search as SearchIcon, SendHorizonal, Bot, Eye, Histo
 import type { User } from '../types/user';
 import { uploadJdFile, uploadResumeFiles } from '../api/upload';
 import { fetchJdsForUser, type JdSummary } from '../api/roles';
-// Import the stopSearch function
 import { searchCandidates, stopSearch } from '../api/search';
 import type { Candidate } from '../types/candidate';
 
@@ -146,6 +145,16 @@ export function SearchPage({ user }: { user: User }) {
       setIsRankingLoading(false);
     }
   };
+  
+  // --- THIS IS THE MISSING FUNCTION ---
+  const handleUpdateCandidate = (updatedCandidate: Candidate) => {
+    setCandidates(prevCandidates =>
+      prevCandidates.map(c =>
+        c.profile_id === updatedCandidate.profile_id ? updatedCandidate : c
+      )
+    );
+  };
+  // --- END OF MISSING FUNCTION ---
 
   const getMainActionButton = () => {
     if (isRankingLoading) {
@@ -268,9 +277,16 @@ export function SearchPage({ user }: { user: User }) {
               </div>
               
               <div className="flex-grow overflow-y-auto max-h-[30vh]">
+                {/* --- THIS IS THE CRITICAL FIX --- */}
+                {/* We now pass the onUpdateCandidate prop to each row */}
                 {candidates.map((candidate) => (
-                  <CandidateRow key={candidate.profile_id} candidate={candidate} />
+                  <CandidateRow 
+                    key={candidate.profile_id} 
+                    candidate={candidate} 
+                    onUpdateCandidate={handleUpdateCandidate}
+                  />
                 ))}
+                {/* --- END OF CRITICAL FIX --- */}
               </div>
             </div>
 
@@ -331,4 +347,3 @@ export function SearchPage({ user }: { user: User }) {
     </div>
   );
 }
-

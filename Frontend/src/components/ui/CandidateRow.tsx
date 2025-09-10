@@ -1,24 +1,100 @@
-import { Link, Star, Send, Phone } from 'lucide-react';
-import React from 'react';
-
-// --- MODIFICATION: The component now uses the updated Candidate type for its props ---
+import { Link as LinkIcon, Star, Send, Phone, Loader2, Linkedin } from 'lucide-react';
+import React, { useState } from 'react';
 import type { Candidate } from '../../types/candidate';
+import { generateLinkedInUrl } from '../../api/search';
 
 interface CandidateRowProps {
   candidate: Candidate;
+  onUpdateCandidate: (updatedCandidate: Candidate) => void;
 }
 
-export function CandidateRow({ candidate }: CandidateRowProps) {
-  // --- MODIFICATION: Logic now uses `profile_name` to create the avatar initials ---
+export function CandidateRow({ candidate, onUpdateCandidate }: CandidateRowProps) {
+  const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+
   const avatarInitial = candidate.profile_name
     ? candidate.profile_name.split(' ').map(n => n[0]).join('')
     : 'C';
 
+  const handleLinkedInClick = async () => {
+    // If we have already generated a URL in this session, just open it.
+    if (generatedUrl) {
+      window.open(generatedUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    
+    if (isGeneratingUrl) return;
+
+    setIsGeneratingUrl(true);
+    setError(null);
+    try {
+      const result = await generateLinkedInUrl(candidate.profile_id);
+      const newUrl = result.profile_url;
+
+      if (newUrl) {
+        window.open(newUrl, '_blank', 'noopener,noreferrer');
+        setGeneratedUrl(newUrl);
+        onUpdateCandidate({ ...candidate, profile_url: newUrl });
+      } else {
+        throw new Error("API did not return a valid URL.");
+      }
+
+    } catch (err) {
+      console.error("Failed to generate LinkedIn URL:", err);
+      setError("Failed to find URL.");
+    } finally {
+      setIsGeneratingUrl(false);
+    }
+  };
+
+  const renderLinkedInButton = () => {
+    const finalUrl = generatedUrl || candidate.profile_url;
+
+    if (generatedUrl) {
+      return (
+        <a 
+          href={finalUrl || '#'}
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-teal-600 hover:text-teal-700 transition-colors"
+          title="Open LinkedIn Profile"
+        >
+          <Linkedin size={18} />
+        </a>
+      );
+    }
+    
+    if (isGeneratingUrl) {
+      return <Loader2 size={18} className="animate-spin text-gray-500" />;
+    }
+
+    if (error) {
+       return (
+        <button 
+          onClick={handleLinkedInClick}
+          className="text-red-500 hover:text-red-700 transition-colors"
+          title={`Error: ${error}. Click to try again.`}
+        >
+          <Linkedin size={18} />
+        </button>
+       )
+    }
+
+    return (
+      <button 
+        onClick={handleLinkedInClick} 
+        className="text-gray-400 hover:text-teal-600 transition-colors"
+        title="Find LinkedIn Profile (Costly)"
+      >
+        <Linkedin size={18} />
+      </button>
+    );
+  };
+
   return (
-    // --- FINAL UI: The JSX is updated to match the new design ---
     <div className="grid grid-cols-12 items-center py-3 border-b border-gray-200 text-sm">
-      
-      {/* Column 1: Candidate Name, Role, and Company */}
+      {/* Columns 1 and 2 are unchanged */}
       <div className="col-span-6 flex items-center gap-3">
         <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center bg-gray-200 text-gray-600 rounded-full font-semibold">
           {avatarInitial}
@@ -28,8 +104,6 @@ export function CandidateRow({ candidate }: CandidateRowProps) {
           <p className="text-gray-500">{`${candidate.role} at ${candidate.company}`}</p>
         </div>
       </div>
-
-      {/* Column 2: Match Score with a dynamic progress pill */}
       <div className="col-span-2">
         <div className="relative w-24 h-6 bg-green-100 rounded-full">
           <div
@@ -42,14 +116,19 @@ export function CandidateRow({ candidate }: CandidateRowProps) {
         </div>
       </div>
 
-      {/* Column 3: Profile Link Icon */}
-      <div className="col-span-2">
-        <a href={candidate.profile_url || '#'} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-teal-600">
-          <Link size={18} />
+      {/* --- THIS IS THE FIX --- */}
+      {/* Both icons are now in the "Profile Link" column, with a gap between them */}
+      <div className="col-span-2 flex items-center gap-4">
+        {/* Original Link Icon */}
+        <a href={generatedUrl || candidate.profile_url || '#'} target="_blank" rel="noopener noreferrer" 
+           className={(generatedUrl || candidate.profile_url) ? "text-teal-600 hover:text-teal-700" : "text-gray-400 cursor-not-allowed"}>
+          <LinkIcon size={18} />
         </a>
+        {/* New Interactive LinkedIn Icon */}
+        {renderLinkedInButton()}
       </div>
 
-      {/* Column 4: Action Buttons */}
+      {/* Column 4: Action Buttons (Reverted to original state) */}
       <div className="col-span-2 flex items-center gap-4 text-gray-500">
         <button className="hover:text-teal-500" title="Favorite"><Star size={18} /></button>
         <button className="hover:text-teal-500" title="Contact"><Send size={18} /></button>

@@ -52,3 +52,27 @@ export const stopSearch = async (): Promise<{ message: string }> => {
   return response.json();
 };
 
+/**
+ * --- START: NEW FUNCTION ---
+ * Calls the backend to generate a LinkedIn URL for a given candidate.
+ * @param profileId The ID of the candidate's profile.
+ * @returns An object containing the newly generated profile_url.
+ */
+export const generateLinkedInUrl = async (profileId: string): Promise<{ profile_url: string }> => {
+  const response = await fetch(`${API_BASE_URL}/search/generate-linkedin-url`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ profile_id: profileId }),
+    credentials: 'include', // Important for sending the auth cookie
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Failed to generate LinkedIn URL');
+  }
+
+  return response.json();
+};
+// --- END: NEW FUNCTION ---
