@@ -5,10 +5,13 @@ import { Plus, UploadCloud, Search as SearchIcon, SendHorizonal, Bot, Eye, Histo
 import type { User } from '../types/user';
 import { uploadJdFile, uploadResumeFiles } from '../api/upload';
 import { fetchJdsForUser, type JdSummary } from '../api/roles';
-import { searchCandidates, stopSearch } from '../api/search';
+// --- START: MODIFICATION ---
+// Import the new rankResumes function
+import { searchCandidates, stopSearch, rankResumes } from '../api/search';
+// --- END: MODIFICATION ---
 import type { Candidate } from '../types/candidate';
 
-// Loader component for visual feedback during search
+// Loader component (Unchanged)
 const Loader = () => (
   <svg className="animate-spin h-5 w-5 text-teal-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -16,6 +19,7 @@ const Loader = () => (
   </svg>
 );
 
+// JobDescriptionDetails interface (Unchanged)
 interface JobDescriptionDetails {
   jd_id: string;
   jd_parsed_summary: string;
@@ -36,10 +40,15 @@ export function SearchPage({ user }: { user: User }) {
   const [chatMessage, setChatMessage] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
+  
+  // --- START: NEW STATE FOR SOURCING OPTION ---
+  const [sourcingOption, setSourcingOption] = useState<'web' | 'db'>('web');
+  // --- END: NEW STATE ---
 
   const jdInputRef = useRef<HTMLInputElement>(null);
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
+  // useEffect and original handlers are unchanged
   useEffect(() => {
     const loadUserJds = async () => {
       try {
@@ -96,28 +105,39 @@ export function SearchPage({ user }: { user: User }) {
     }
   };
 
+  // --- START: MODIFIED handleSearchAndRank FUNCTION ---
   const handleSearchAndRank = async () => {
     if (!currentJd) {
       setUploadStatus({ message: 'Please upload a Job Description first.', type: 'error' });
       return;
     }
     if (!chatMessage) {
-      setUploadStatus({ message: 'Please enter a prompt in the chat box to start the search.', type: 'error' });
+      setUploadStatus({ message: 'Please enter a prompt to start the search.', type: 'error' });
       return;
     }
 
     setIsRankingLoading(true);
     setUploadStatus(null);
     setHasSearched(true);
+
     try {
+      let result: Candidate[] = [];
+
+      // Always upload resumes first if they are present, regardless of sourcing option
       if (resumeFiles && resumeFiles.length > 0) {
         await uploadResumeFiles(resumeFiles, currentJd.jd_id);
-        setResumeFiles(null); 
+        setResumeFiles(null);
         if (resumeInputRef.current) resumeInputRef.current.value = "";
-        setUploadStatus({ message: 'Resumes uploaded. Starting search & rank...', type: 'success' });
+        setUploadStatus({ message: 'Resumes uploaded. Starting ranking...', type: 'success' });
       }
 
-      const result = await searchCandidates(currentJd.jd_id, chatMessage);
+      // Decide which API to call based on the selected sourcing option
+      if (sourcingOption === 'db') {
+        result = await rankResumes(currentJd.jd_id, chatMessage);
+      } else { // 'web' is the other option
+        result = await searchCandidates(currentJd.jd_id, chatMessage);
+      }
+      
       setCandidates(result);
 
       if (result.length > 0) {
@@ -134,6 +154,7 @@ export function SearchPage({ user }: { user: User }) {
       setIsRankingLoading(false);
     }
   };
+  // --- END: MODIFIED handleSearchAndRank FUNCTION ---
   
   const handleStopSearch = async () => {
     try {
@@ -146,7 +167,6 @@ export function SearchPage({ user }: { user: User }) {
     }
   };
   
-  // --- THIS IS THE MISSING FUNCTION ---
   const handleUpdateCandidate = (updatedCandidate: Candidate) => {
     setCandidates(prevCandidates =>
       prevCandidates.map(c =>
@@ -154,7 +174,6 @@ export function SearchPage({ user }: { user: User }) {
       )
     );
   };
-  // --- END OF MISSING FUNCTION ---
 
   const getMainActionButton = () => {
     if (isRankingLoading) {
@@ -184,6 +203,7 @@ export function SearchPage({ user }: { user: User }) {
       <main className="flex-grow p-4 sm:p-6 md:p-8 max-w-screen-2xl mx-auto w-full overflow-y-hidden min-h-0">
         <div className="grid grid-cols-12 gap-8 h-full">
           <aside className="col-span-3 flex flex-col gap-6 overflow-y-auto pb-4">
+            {/* JD Selection Box (Unchanged) */}
              <div className="p-4 bg-white rounded-lg border border-gray-200 flex-shrink-0">
               <div className="flex justify-between items-center mb-2">
                 <label className="font-semibold text-gray-700">Select Role</label>
@@ -226,12 +246,31 @@ export function SearchPage({ user }: { user: User }) {
                 </button>
               </div>
             </div>
+            {/* --- START: MODIFIED SOURCING OPTIONS --- */}
             <div className="p-4 bg-white rounded-lg border border-gray-200 flex-shrink-0">
               <h3 className="font-semibold text-gray-700 mb-3">Sourcing Options</h3>
               <div className="space-y-2 text-sm">
-                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="db" /> My Database</label>
-                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="web" defaultChecked /> Web Search</label>
-                <label className="flex items-center gap-2"><input type="radio" name="sourcing" value="both" /> Both</label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="sourcing"
+                    value="db"
+                    checked={sourcingOption === 'db'}
+                    onChange={() => setSourcingOption('db')}
+                  /> My Database
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="sourcing"
+                    value="web"
+                    checked={sourcingOption === 'web'}
+                    onChange={() => setSourcingOption('web')}
+                  /> Web Search
+                </label>
+                <label className="flex items-center gap-2 text-gray-400">
+                  <input type="radio" name="sourcing" value="both" disabled /> Both (Coming Soon)
+                </label>
               </div>
               <button onClick={() => resumeInputRef.current?.click()} className="mt-4 w-full border-dashed border-2 border-gray-300 rounded-lg p-6 text-center hover:border-teal-500 hover:text-teal-500 transition-colors">
                 <UploadCloud size={24} className="mx-auto text-gray-400"/>
@@ -241,6 +280,7 @@ export function SearchPage({ user }: { user: User }) {
               </button>
               <input type="file" ref={resumeInputRef} onChange={handleResumeFilesChange} className="hidden" accept=".pdf,.docx,.txt" multiple/>
             </div>
+            {/* --- END: MODIFIED SOURCING OPTIONS --- */}
             {getMainActionButton()}
             {uploadStatus && (
               <div className={`mt-4 p-3 rounded-md text-sm text-center flex-shrink-0 ${uploadStatus.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -249,6 +289,7 @@ export function SearchPage({ user }: { user: User }) {
             )}
           </aside>
           
+          {/* Main Content Area (Unchanged) */}
           <div className="col-span-9 flex flex-col gap-8 h-full min-h-0">
             <div className="p-6 bg-white rounded-lg border border-gray-200 flex flex-col flex-grow min-h-0">
               <div className="flex-shrink-0">
@@ -277,8 +318,6 @@ export function SearchPage({ user }: { user: User }) {
               </div>
               
               <div className="flex-grow overflow-y-auto max-h-[30vh]">
-                {/* --- THIS IS THE CRITICAL FIX --- */}
-                {/* We now pass the onUpdateCandidate prop to each row */}
                 {candidates.map((candidate) => (
                   <CandidateRow 
                     key={candidate.profile_id} 
@@ -286,7 +325,6 @@ export function SearchPage({ user }: { user: User }) {
                     onUpdateCandidate={handleUpdateCandidate}
                   />
                 ))}
-                {/* --- END OF CRITICAL FIX --- */}
               </div>
             </div>
 

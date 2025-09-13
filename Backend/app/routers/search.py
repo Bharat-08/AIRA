@@ -1,4 +1,7 @@
 import asyncio
+import os
+import sys
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
@@ -46,6 +49,7 @@ class RankedCandidateResponse(BaseModel):
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # --- NO CHANGE to your original agent initialization ---
 search_agent = ErrorFixedDeepResearchAgent()
@@ -147,3 +151,70 @@ async def search_and_rank_candidates(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"An error occurred during the search and rank process: {str(e)}")
+
+# --- START: NEW ENDPOINT FOR "MY DATABASE" ---
+@router.post("/rank-resumes")
+async def rank_resumes(
+    request: SearchRequest,
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """
+    Ranks resumes from the 'resume' table for a given JD and returns the ranked candidates.
+    """
+    jd_id = request.jd_id
+    user_id = str(current_user.id)
+
+    try:
+        # Resolve my_database.py absolute path
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))  # /app/app/routers -> /app
+        script_path = os.path.join(base_dir, "my_database.py")
+        if not os.path.isfile(script_path):
+            alt = os.path.join(os.getcwd(), "my_database.py")
+            if os.path.isfile(alt):
+                script_path = alt
+
+        if not os.path.isfile(script_path):
+            logger.error("Script not found at %s (cwd=%s)", script_path, os.getcwd())
+            raise HTTPException(status_code=500, detail=f"Script not found at {script_path}")
+
+        logger.info("Running ranking script: %s for jd_id=%s user_id=%s", script_path, jd_id, user_id)
+
+        # Ensure subprocess inherits environment
+        env = os.environ.copy()
+
+        # Call my_database.py with BOTH jd_id and user_id
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, script_path, jd_id, user_id,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env
+        )
+        stdout_bytes, stderr_bytes = await process.communicate()
+        stdout = stdout_bytes.decode(errors="replace") if stdout_bytes else ""
+        stderr = stderr_bytes.decode(errors="replace") if stderr_bytes else ""
+
+        logger.info("my_database.py exit_code=%s", process.returncode)
+        if stdout:
+            logger.info("my_database.py stdout:\n%s", stdout)
+        if stderr:
+            logger.warning("my_database.py stderr:\n%s", stderr)
+
+        if process.returncode != 0:
+            detail = f"Ranking script failed. exit={process.returncode}. stderr={stderr[:1000]}"
+            logger.error(detail)
+            raise HTTPException(status_code=500, detail=detail)
+
+        # Fetch ranked candidates using RPC
+        rpc_params = {'jd_id_param': jd_id}
+        ranked_response = supabase.rpc('get_ranked_resumes_with_details', rpc_params).execute()
+        logger.info("RPC returned %d rows (error=%s)", len(ranked_response.data or []), getattr(ranked_response, "error", None))
+
+        return ranked_response.data if ranked_response.data else []
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("An error occurred during resume ranking: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+# --- END: NEW ENDPOINT ---

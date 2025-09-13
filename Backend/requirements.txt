@@ -139,4 +139,4 @@ peopledatalabs
 beautifulsoup4
 rapidfuzz
 langgraph
-google-genai
+google-genai>=0.9.0

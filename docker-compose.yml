@@ -12,9 +12,13 @@ services:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
       - ./backend/alembic.ini:/app/alembic.ini
-      - ./test_searcher.py:/app/test_searcher.py
-      - ./ranker.py:/app/ranker.py
-      
+      # --- START: THIS IS THE FIX ---
+      # Update the paths to reflect the new location of the agent files
+      # inside the 'backend/app/services' directory.
+      - ./backend/app/services/test_searcher.py:/app/app/services/test_searcher.py
+      - ./backend/app/services/ranker.py:/app/app/services/ranker.py
+      # --- END: THIS IS THE FIX ---
+
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
@@ -25,15 +29,12 @@ services:
     volumes:
       # Sync your local frontend code with the container
       - ./frontend:/app
-      # --- THIS IS THE FIX ---
-      # Use a named volume to isolate node_modules inside the container,
-      # preventing conflicts with your local machine.
+      # Use a named volume to isolate node_modules inside the container
       - node_modules:/app/node_modules
     command: npm run dev -- --host
     depends_on:
       - backend
 
-# --- ADD THIS SECTION AT THE END ---
-# This defines the named volume we used above.
+# Defines the named volume we used above.
 volumes:
   node_modules:

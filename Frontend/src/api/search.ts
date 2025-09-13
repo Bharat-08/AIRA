@@ -54,6 +54,37 @@ export const stopSearch = async (): Promise<{ message: string }> => {
 
 /**
  * --- START: NEW FUNCTION ---
+ * Calls the backend to rank resumes from the database for a given JD.
+ * @param jdId The ID of the job description.
+ * @param prompt The user's search prompt (though it might not be used by this specific endpoint, it's good practice to pass it).
+ * @returns A list of ranked candidates from the database.
+ */
+export const rankResumes = async (jdId: string, prompt: string): Promise<Candidate[]> => {
+  const response = await fetch(`${API_BASE_URL}/search/rank-resumes`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ jd_id: jdId, prompt: prompt }),
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    if (response.status === 499) {
+      console.log('Search was cancelled by the user.');
+      return [];
+    }
+    const errorData = await response.json();
+    throw new Error(errorData.detail || 'Failed to rank resumes');
+  }
+
+  return response.json();
+};
+/**
+ * --- END: NEW FUNCTION ---
+ */
+
+/**
  * Calls the backend to generate a LinkedIn URL for a given candidate.
  * @param profileId The ID of the candidate's profile.
  * @returns An object containing the newly generated profile_url.
@@ -75,4 +106,3 @@ export const generateLinkedInUrl = async (profileId: string): Promise<{ linkedin
 
   return response.json();
 };
-// --- END: NEW FUNCTION ---
