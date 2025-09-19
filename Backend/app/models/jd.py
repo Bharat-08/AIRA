@@ -18,6 +18,11 @@ class JD(Base):
     job_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     experience_required: Mapped[str | None] = mapped_column(Text, nullable=True)
     jd_parsed_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # --- NEW FIELD ADDED HERE ---
+    # This column will store the full, unprocessed text of the job description.
+    jd_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Foreign Key to the User who uploaded it

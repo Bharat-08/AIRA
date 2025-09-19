@@ -106,55 +106,58 @@ export function SearchPage({ user }: { user: User }) {
   };
 
   // --- START: MODIFIED handleSearchAndRank FUNCTION ---
-  const handleSearchAndRank = async () => {
-    if (!currentJd) {
-      setUploadStatus({ message: 'Please upload a Job Description first.', type: 'error' });
-      return;
+const handleSearchAndRank = async () => {
+  if (!currentJd) {
+    setUploadStatus({ message: 'Please upload a Job Description first.', type: 'error' });
+    return;
+  }
+
+  // For DB: prompt is mandatory
+  if (sourcingOption === 'db' && (!chatMessage || chatMessage.trim() === '')) {
+    setUploadStatus({ message: 'Please enter a prompt before ranking from your database.', type: 'error' });
+    return;
+  }
+
+  setIsRankingLoading(true);
+  setUploadStatus(null);
+  setHasSearched(true);
+
+  try {
+    let result: Candidate[] = [];
+
+    // Always upload resumes first if they are present
+    if (resumeFiles && resumeFiles.length > 0) {
+      await uploadResumeFiles(resumeFiles, currentJd.jd_id);
+      setResumeFiles(null);
+      if (resumeInputRef.current) resumeInputRef.current.value = "";
+      setUploadStatus({ message: 'Resumes uploaded. Starting ranking...', type: 'success' });
     }
-    if (!chatMessage) {
-      setUploadStatus({ message: 'Please enter a prompt to start the search.', type: 'error' });
-      return;
+
+    // API calls depend on sourcing option
+    if (sourcingOption === 'db') {
+      result = await rankResumes(currentJd.jd_id, chatMessage);
+    } else { // 'web'
+      result = await searchCandidates(currentJd.jd_id, chatMessage || ""); // prompt optional
     }
 
-    setIsRankingLoading(true);
-    setUploadStatus(null);
-    setHasSearched(true);
+    setCandidates(result);
 
-    try {
-      let result: Candidate[] = [];
-
-      // Always upload resumes first if they are present, regardless of sourcing option
-      if (resumeFiles && resumeFiles.length > 0) {
-        await uploadResumeFiles(resumeFiles, currentJd.jd_id);
-        setResumeFiles(null);
-        if (resumeInputRef.current) resumeInputRef.current.value = "";
-        setUploadStatus({ message: 'Resumes uploaded. Starting ranking...', type: 'success' });
-      }
-
-      // Decide which API to call based on the selected sourcing option
-      if (sourcingOption === 'db') {
-        result = await rankResumes(currentJd.jd_id, chatMessage);
-      } else { // 'web' is the other option
-        result = await searchCandidates(currentJd.jd_id, chatMessage);
-      }
-      
-      setCandidates(result);
-
-      if (result.length > 0) {
-        setUploadStatus({ message: `Found and ranked ${result.length} total candidates!`, type: 'success' });
-      } else {
-        setUploadStatus({ message: 'Search complete. No new candidates were found.', type: 'success' });
-      }
-
-    } catch (error) {
-       if ((error as Error).message !== 'Search cancelled by user.') {
-        setUploadStatus({ message: (error as Error).message, type: 'error' });
-      }
-    } finally {
-      setIsRankingLoading(false);
+    if (result.length > 0) {
+      setUploadStatus({ message: `Found and ranked ${result.length} total candidates!`, type: 'success' });
+    } else {
+      setUploadStatus({ message: 'Search complete. No new candidates were found.', type: 'success' });
     }
-  };
-  // --- END: MODIFIED handleSearchAndRank FUNCTION ---
+
+  } catch (error) {
+     if ((error as Error).message !== 'Search cancelled by user.') {
+      setUploadStatus({ message: (error as Error).message, type: 'error' });
+    }
+  } finally {
+    setIsRankingLoading(false);
+  }
+};
+// --- END: MODIFIED handleSearchAndRank FUNCTION ---
+
   
   const handleStopSearch = async () => {
     try {
@@ -186,13 +189,15 @@ export function SearchPage({ user }: { user: User }) {
         </button>
       );
     }
+    // Text depends on sourcing option: 'Rank' for DB, otherwise 'Search and Rank'
+    const buttonText = sourcingOption === 'db' ? 'Rank' : 'Search and Rank';
     return (
       <button 
         onClick={handleSearchAndRank} 
         disabled={isJdLoading} 
         className="w-full bg-teal-600 text-white font-semibold py-3 rounded-lg hover:bg-teal-700 flex items-center justify-center gap-2 disabled:bg-gray-400 transition-colors"
       >
-        <SearchIcon size={18}/> Search and Rank
+        <SearchIcon size={18}/> {buttonText}
       </button>
     );
   };
@@ -222,7 +227,7 @@ export function SearchPage({ user }: { user: User }) {
                 {userJds.length > 0 ? (
                   userJds.map(jd => (
                     <option key={jd.jd_id} value={jd.jd_id}>
-                      {jd.title}
+                      {jd.role}
                     </option>
                   ))
                 ) : (
@@ -329,18 +334,18 @@ export function SearchPage({ user }: { user: User }) {
             </div>
 
             <div className="p-6 bg-white rounded-lg border border-gray-200 flex-shrink-0">
-                <div className="flex items-center gap-2 mb-4">
+                {/* <div className="flex items-center gap-2 mb-4">
                   <h3 className="text-base font-semibold text-gray-800">Refine Search with AIRA</h3>
                   <Bot size={16} className="text-teal-600"/>
-                </div>
+                </div> */}
                 
                 <div className="flex flex-col gap-4 mb-4">
-                    <div className="self-start">
+                    {/* <div className="self-start">
                         <button className="flex items-center gap-2 text-sm text-left p-3 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors text-gray-700">
                             <Bot size={16} className="text-teal-600 flex-shrink-0"/>
                             <span>Find candidates with 5+ years of SaaS experience.</span>
                         </button>
-                    </div>
+                    </div> */}
                     {hasSearched && (
                       <div className="self-end">
                           <div className="p-3 text-sm rounded-lg bg-green-100 text-green-800">
@@ -351,21 +356,24 @@ export function SearchPage({ user }: { user: User }) {
                 </div>
 
                 <div className="relative">
-                    <input
-                        type="text"
-                        value={chatMessage}
-                        onChange={(e) => setChatMessage(e.target.value)}
-                        placeholder="Chat with AIRA..."
-                        className="w-full pl-4 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                        onKeyDown={(e) => e.key === 'Enter' && !isRankingLoading && handleSearchAndRank()}
-                        disabled={isRankingLoading}
-                    />
-                    <button 
-                      onClick={isRankingLoading ? handleStopSearch : handleSearchAndRank} 
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-teal-600"
-                    >
-                      {isRankingLoading ? <XCircle size={20} className="text-red-500"/> : <SendHorizonal size={20} />}
-                    </button>
+                <input
+  type="text"
+  value={chatMessage}
+  onChange={(e) => setChatMessage(e.target.value)}
+  placeholder={sourcingOption === 'db' ? 'Disabled for My Database' : 'Chat with AIRA... (optional)'}
+  className="w-full pl-4 pr-10 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+  onKeyDown={(e) => e.key === 'Enter' && !isRankingLoading && sourcingOption !== 'db' && handleSearchAndRank()}
+  disabled={isRankingLoading || sourcingOption === 'db'}
+/>
+<button 
+  onClick={isRankingLoading ? handleStopSearch : handleSearchAndRank} 
+  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 hover:text-teal-600"
+  disabled={isRankingLoading || sourcingOption === 'db'}
+  aria-disabled={isRankingLoading || sourcingOption === 'db'}
+>
+  {isRankingLoading ? <XCircle size={20} className="text-red-500"/> : <SendHorizonal size={20} />}
+</button>
+
                 </div>
 
                 {hasSearched && !isRankingLoading && (

@@ -1,118 +1,87 @@
 import type { Role } from '../types/role';
 
-// --- MOCK DATA SECTION (Preserved for RolesPage) ---
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-const now = new Date('2024-06-12T10:00:00Z'); 
-
-const daysAgo = (days: number) => {
-  const date = new Date(now);
-  date.setDate(date.getDate() - days);
-  return date.toISOString();
-};
-
-// This mock data is kept to ensure the RolesPage continues to work as expected.
-export const mockRoles: Role[] = [
-  {
-    id: '1',
-    title: 'Senior Software Engineer',
-    location: 'Bangalore',
-    createdAt: daysAgo(2),
-    updatedAt: '2024-06-10T00:00:00Z',
-    description: [
-      'We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.',
-      'You will work closely with other engineers, product managers, and designers to deliver innovative and impactful products.',
-      'We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.','We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.',
-      'You will work closely with other engineers, product managers, and designers to deliver innovative and impactful products.',
-      'We are seeking a highly motivated and experienced Senior Software Engineer to join our growing team. In this role, you will be responsible for designing, developing, and maintaining high-quality software solutions that meet the needs of our clients.'
-    ],
-    experience: '5+ years',
-    keyRequirements: ['React', 'Node.js', 'PostgreSQL', 'AWS'],
-    candidateStats: { liked: 12, contacted: 4 },
-  },
-  {
-    id: '2',
-    title: 'Product Manager',
-    location: 'San Francisco',
-    createdAt: daysAgo(10),
-    updatedAt: '2024-06-05T00:00:00Z',
-    description: ['Define product vision, strategy, and roadmap. Work with cross-functional teams to design, build, and roll-out products that deliver the company’s vision and strategy.'],
-    experience: '4+ years',
-    keyRequirements: ['Agile', 'Roadmapping', 'User Research'],
-    candidateStats: { liked: 25, contacted: 10 },
-  },
-  // --- THIS IS THE FIX: IDs are now unique ---
-  {
-    id: '4', // Formerly '2'
-    title: 'CEO',
-    location: 'San Francisco',
-    createdAt: daysAgo(10),
-    updatedAt: '2024-06-05T00:00:00Z',
-    description: ['Define product vision, strategy, and roadmap. Work with cross-functional teams to design, build, and roll-out products that deliver the company’s vision and strategy.'],
-    experience: '4+ years',
-    keyRequirements: ['Agile', 'Roadmapping', 'User Research'],
-    candidateStats: { liked: 25, contacted: 10 },
-  },
-  {
-    id: '5', // Formerly '2'
-    title: 'CTO',
-    location: 'San Francisco',
-    createdAt: daysAgo(10),
-    updatedAt: '2024-06-05T00:00:00Z',
-    description: ['Define product vision, strategy, and roadmap. Work with cross-functional teams to design, build, and roll-out products that deliver the company’s vision and strategy.'],
-    experience: '4+ years',
-    keyRequirements: ['Agile', 'Roadmapping', 'User Research'],
-    candidateStats: { liked: 25, contacted: 10 },
-  },
-  {
-    id: '3',
-    title: 'UX/UI Designer',
-    location: 'New York',
-    createdAt: daysAgo(30),
-    updatedAt: '2024-05-13T00:00:00Z',
-    description: ['Create user-centered designs by understanding business requirements, and user feedback. Create user flows, wireframes, prototypes, and mockups.'],
-    experience: '3+ years',
-    keyRequirements: ['Figma', 'Sketch', 'Adobe XD'],
-    candidateStats: { liked: 18, contacted: 8 },
-  },
-];
-
-
-// --- LIVE API SECTION (Added for SearchPage) ---
-
-const API_BASE_URL = 'http://localhost:8000';
-
-/**
- * Defines the TypeScript interface for the summarized JD data.
- * This matches the data structure from the GET /roles endpoint.
- */
 export interface JdSummary {
   jd_id: string;
   title: string;
+  role: string | null;
   location?: string;
   job_type?: string;
   experience_required?: string;
   jd_parsed_summary?: string;
+  created_at: string;
+  key_requirements?: string;
 }
 
 /**
- * Fetches real job descriptions uploaded by the current user.
- * This function is used by the SearchPage dropdown.
- * @returns A promise that resolves to an array of JD summaries.
+ * Fetches real job descriptions uploaded by the current user using cookie authentication.
  */
 export const fetchJdsForUser = async (): Promise<JdSummary[]> => {
-  const response = await fetch(`${API_BASE_URL}/roles`, {
-    method: 'GET',
+  const response = await fetch(`${API_BASE_URL}/roles/`, {
+    credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json'
     },
-    credentials: 'include', // Ensures the auth cookie is sent
   });
-
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.detail || 'Failed to fetch your saved Job Descriptions.');
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to fetch roles');
   }
-
   return response.json();
 };
 
+/**
+ * Creates a new role by uploading a Job Description file using cookie authentication.
+ */
+export const createRole = async (file: File): Promise<Role> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/roles/`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to create the new role.');
+  }
+
+  const createdJd: JdSummary = await response.json();
+  // Transform the API response to the frontend's Role type
+  return {
+    id: createdJd.jd_id,
+    title: createdJd.title,
+    location: createdJd.location || 'N/A',
+    createdAt: createdJd.created_at,
+    description: [createdJd.jd_parsed_summary || 'No summary available.'],
+    experience: createdJd.experience_required || 'N/A',
+    keyRequirements: createdJd.key_requirements ? createdJd.key_requirements.split(', ') : [],
+    candidateStats: { liked: 0, contacted: 0 },
+    status: 'open',
+  };
+};
+
+/**
+ * A wrapper function that uses fetchJdsForUser and transforms the data
+ * to the format expected by the frontend components.
+ */
+export const getRoles = async (): Promise<Role[]> => {
+  const jds = await fetchJdsForUser();
+  // --- FIX ---
+  // The 'id' field is now correctly mapped from the API's 'jd_id'.
+  // This was the final issue preventing the roles from displaying correctly.
+  return jds.map(jd => ({
+    id: jd.jd_id, // This line is now correct
+    title: jd.role,
+    location: jd.location || 'N/A',
+    createdAt: jd.created_at,
+    description: jd.jd_parsed_summary ? [jd.jd_parsed_summary] : ['No description available.'],
+    experience: jd.experience_required || 'Not specified',
+    keyRequirements: jd.key_requirements ? jd.key_requirements.split(', ') : [],
+    candidateStats: { liked: 0, contacted: 0 },
+    status: 'open',
+  }));
+};

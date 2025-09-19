@@ -60,4 +60,3 @@ export const uploadResumeFiles = async (files: FileList, jdId: string): Promise<
 
   return response.json();
 };
-
